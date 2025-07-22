@@ -7,6 +7,7 @@
     <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap');
 
@@ -175,7 +176,8 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            min-height: 180px; /* Ensure consistent height */
+            min-height: 100px; /* Reduced height */
+            padding: 15px; /* Reduced padding */
         }
 
         @media (min-width: 900px) {
@@ -195,9 +197,9 @@
 
         .chart-container {
             position: relative;
-            width: 150px;
-            height: 150px;
-            margin-bottom: 15px;
+            width: 100px; /* Reduced size */
+            height: 100px; /* Reduced size */
+            margin-bottom: 10px; /* Adjusted margin */
         }
 
         .chart-text {
@@ -205,7 +207,7 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            font-size: 1.8em;
+            font-size: 1.4em; /* Adjusted font size */
             font-weight: 700;
             color: var(--text-color);
         }
@@ -250,7 +252,11 @@
             border: 1px solid var(--border-color);
             text-align: left;
             vertical-align: top;
-            white-space: nowrap; /* Prevent wrapping in cells */
+        }
+        
+        /* Allow wrapping for text in deliverable cells */
+        .project-table td:first-child, .project-table th:first-child {
+            white-space: normal;
         }
 
         .project-table thead th {
@@ -270,18 +276,38 @@
             background-color: #f0f0f0;
         }
 
-        /* Sticky first column */
+        /* Sticky first column (Section / Deliverable) */
         .project-table .sticky-col {
             position: sticky;
             left: 0;
             background-color: inherit; /* Inherit row background */
             z-index: 5;
             box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
+            width: 250px; /* Default width, will be overridden by resize */
+            min-width: 150px; /* Minimum width for resizing */
+            overflow: hidden; /* Hide overflow when resizing */
         }
 
         .project-table th.sticky-col {
             background-color: #eef;
+            position: relative; /* For resizer handle */
         }
+        
+        /* Resizer handle for the first column */
+        .resizer {
+            position: absolute;
+            right: 0;
+            top: 0;
+            width: 8px; /* Make it wider for easier grabbing */
+            height: 100%;
+            background: transparent; /* Invisible handle */
+            cursor: col-resize;
+            z-index: 1; /* Above other content */
+        }
+        .project-table th.sticky-col:hover .resizer {
+             background-color: rgba(0, 0, 0, 0.1); /* Visible on hover */
+        }
+
 
         /* Section/Subsection styling */
         .section-row {
@@ -354,8 +380,6 @@
             font-size: 0.95em;
             box-sizing: border-box;
             background-color: transparent;
-        }
-        .editable-cell:not([type="date"]):not(select) { /* Only text inputs should get this hover/focus */
             white-space: normal; /* Allow wrapping for deliverable names */
         }
 
@@ -960,7 +984,10 @@
             <table class="project-table" id="projectTable">
                 <thead>
                     <tr>
-                        <th class="sticky-col">Section / Deliverable</th>
+                        <th class="sticky-col">
+                            Section / Deliverable
+                            <div class="resizer"></div>
+                        </th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1016,7 +1043,6 @@
             </div>
         </div>
     </div>
-
     <datalist id="departmentList"></datalist>
     <datalist id="amRequiredList"></datalist>
 
@@ -1034,12 +1060,13 @@
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
+        const projectRef = db.ref('projectData'); // Reference to the root of your project data
 
         // --- Data Structure ---
         let projectData = {
             title: "My Awesome Project",
             sections: [], // Each section can contain subsections and deliverables
-            areas: [], // New: Defines the columns (Areas)
+            areas: [],    // New: Defines the columns (Areas)
             nextSectionId: 1,
             nextDeliverableId: 1,
             nextAreaId: 1 // For unique Area (column) IDs
@@ -1072,7 +1099,6 @@
             "Surveying Department",
             "Geotechnical & Soil Investigation Department"
         ];
-
         const AM_REQUIRED_OPTIONS = [
             "Mandatory",
             "Recommended",
@@ -1091,6 +1117,8 @@
         const importExcelInput = document.getElementById('importExcelInput');
         const printReportBtn = document.getElementById('printReportBtn');
         const resetProjectBtn = document.getElementById('resetProjectBtn');
+        const connectivityIndicator = document.getElementById('connectivityIndicator');
+
 
         // Dashboard elements
         const totalDeliverablesSpan = document.getElementById('totalDeliverables');
@@ -1120,8 +1148,8 @@
         const deliverablesContainer = document.getElementById('deliverablesContainer');
         const addDeliverableEntryBtn = document.getElementById('addDeliverableEntryBtn');
 
-
         // --- Utility Functions ---
+
         // Function to get all unique departments from all deliverables
         function getAllDepartments() {
             const departments = new Set(PREDEFINED_DEPARTMENTS); // Start with predefined ones
@@ -1159,7 +1187,6 @@
             }
         }
 
-
         // --- Modal Functions (Moved to top for scope) ---
         function showModal(modalId) {
             document.getElementById(modalId).style.display = 'flex';
@@ -1170,7 +1197,6 @@
         }
 
         let deliverableEntryCounter = 0; // To give unique IDs to modal deliverable inputs
-
         function addDeliverableEntry(initialData = {}) {
             const index = deliverableEntryCounter++;
             const entryDiv = document.createElement('div');
@@ -1208,7 +1234,6 @@
                 e.target.closest('.deliverable-entry').remove();
             });
         }
-
 
         function showAddSectionDeliverablesModal() {
             // Clear previous inputs
@@ -1255,7 +1280,6 @@
 
             let targetSection = projectData.sections.find(s => s.name === sectionName);
             let isNewSection = false;
-
             if (!targetSection) {
                 isNewSection = true;
                 targetSection = {
@@ -1271,7 +1295,6 @@
             }
 
             let parentForDeliverables = targetSection.children;
-
             if (subsectionName) {
                 // Check if subsection already exists within this section
                 let targetSubsection = targetSection.children.find(
@@ -1306,7 +1329,6 @@
                         notes: comments, // Now directly on deliverable
                         areaData: {} // Area data remains for status/due date
                     };
-
                     projectData.areas.forEach(area => {
                         newDeliverable.areaData[area.id] = {
                             status: "NotStarted",
@@ -1348,703 +1370,602 @@
                     }
                     initializeNewAreaForChildren(sec);
                 });
-
                 addChangeLogEntry(`Added new area column: "${areaName}"`);
                 saveProjectData();
                 renderTable();
                 closeModal('addAreaModal');
             } else {
-                alert("Please enter a name for the new area.");
+                alert('الرجاء إدخال اسم المنطقة.');
             }
         }
 
+        // --- Firebase Data Handling ---
 
-        // --- Initialization ---
-        document.addEventListener('DOMContentLoaded', () => {
-            populateDatalists(); // Populate datalists first
-            loadProjectData();
-            renderTable();
-            setupEventListeners();
-            // Initially add one deliverable entry to the new modal
-            addDeliverableEntry();
+        // Save data to Firebase
+        function saveProjectData() {
+            projectRef.set(projectData)
+                .then(() => {
+                    connectivityIndicator.style.backgroundColor = '#4CAF50'; // Green for connected/saved
+                    connectivityIndicator.setAttribute('data-tooltip', 'Connected to Firebase (Saved)');
+                    console.log("Project data saved to Firebase successfully!");
+                })
+                .catch((error) => {
+                    connectivityIndicator.style.backgroundColor = '#F44336'; // Red for error
+                    connectivityIndicator.setAttribute('data-tooltip', 'Firebase Save Error!');
+                    console.error("Error saving project data to Firebase:", error);
+                });
+        }
+
+        // Load data from Firebase
+        function loadProjectData() {
+            projectRef.once('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    projectData = data;
+                    // Ensure necessary defaults if data is old or incomplete
+                    projectData.sections = projectData.sections || [];
+                    projectData.areas = projectData.areas || [];
+                    projectData.nextSectionId = projectData.nextSectionId || 1;
+                    projectData.nextDeliverableId = projectData.nextDeliverableId || 1;
+                    projectData.nextAreaId = projectData.nextAreaId || 1;
+                    projectData.title = projectData.title || "My Awesome Project";
+                    addChangeLogEntry("بيانات المشروع تم تحميلها بنجاح من Firebase.");
+                } else {
+                    addChangeLogEntry("لا توجد بيانات مشروع في Firebase، تم بدء مشروع جديد.");
+                }
+                renderTable();
+                updateDashboard();
+                populateDepartmentFilterDropdown();
+                populateDatalists();
+            }, (error) => {
+                connectivityIndicator.style.backgroundColor = '#F44336'; // Red for error
+                connectivityIndicator.setAttribute('data-tooltip', 'Firebase Load Error!');
+                console.error("Error loading project data from Firebase:", error);
+                alert("خطأ في تحميل البيانات من Firebase. يرجى التحقق من اتصالك وإعدادات Firebase.");
+            });
+        }
+
+        // Real-time listener for Firebase changes
+        projectRef.on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                // Prevent re-rendering if data is identical (e.g., from own save)
+                if (JSON.stringify(projectData) !== JSON.stringify(data)) {
+                    projectData = data;
+                    projectData.sections = projectData.sections || [];
+                    projectData.areas = projectData.areas || [];
+                    projectData.nextSectionId = projectData.nextSectionId || 1;
+                    projectData.nextDeliverableId = projectData.nextDeliverableId || 1;
+                    projectData.nextAreaId = projectData.nextAreaId || 1;
+                    projectData.title = projectData.title || "My Awesome Project";
+                    renderTable();
+                    updateDashboard();
+                    populateDepartmentFilterDropdown();
+                    populateDatalists();
+                    connectivityIndicator.style.backgroundColor = '#4CAF50'; // Green
+                    connectivityIndicator.setAttribute('data-tooltip', 'Connected to Firebase (Auto-updated)');
+                    addChangeLogEntry("تم تحديث البيانات تلقائياً من Firebase.");
+                }
+            } else {
+                // If data is null, assume reset or empty
+                projectData = {
+                    title: "My Awesome Project",
+                    sections: [],
+                    areas: [],
+                    nextSectionId: 1,
+                    nextDeliverableId: 1,
+                    nextAreaId: 1
+                };
+                renderTable();
+                updateDashboard();
+                populateDepartmentFilterDropdown();
+                populateDatalists();
+                connectivityIndicator.style.backgroundColor = '#4CAF50'; // Green
+                connectivityIndicator.setAttribute('data-tooltip', 'Connected to Firebase (Empty Data)');
+                addChangeLogEntry("قاعدة بيانات Firebase فارغة أو تمت إعادة تعيينها. تم بدء مشروع جديد.");
+            }
+        }, (error) => {
+            connectivityIndicator.style.backgroundColor = '#F44336'; // Red
+            connectivityIndicator.setAttribute('data-tooltip', 'Firebase Disconnected!');
+            console.error("Firebase connection error:", error);
+            addChangeLogEntry("خطأ في الاتصال بـ Firebase: " + error.message);
         });
 
-        // Add Chart.js library dynamically
-        let chartJsLoaded = false;
-        const script = document.createElement('script');
-        script.src = "https://cdn.jsdelivr.net/npm/chart.js";
-        script.onload = () => {
-            chartJsLoaded = true;
-            updateDashboard();
-        };
-        document.head.appendChild(script);
 
-        // --- Local Storage Management (Fall back if Firebase fails or for initial load) ---
-        function saveProjectDataLocal() {
-            localStorage.setItem('projectDeliverablesData', JSON.stringify(projectData));
-            updateDashboard();
-            populateDepartmentFilterDropdown(); // Use the filter population function
-        }
+        // --- Core Rendering Functions ---
 
-        function loadProjectDataLocal() {
-            const storedData = localStorage.getItem('projectDeliverablesData');
-            if (storedData) {
-                projectData = JSON.parse(storedData);
-                // Ensure default values if not present in old data
-                if (!projectData.title) projectData.title = "My Awesome Project";
-                if (!projectData.sections) projectData.sections = [];
-                if (!projectData.areas) projectData.areas = []; // Initialize areas if not present
-                if (!projectData.nextSectionId) projectData.nextSectionId = 1;
-                if (!projectData.nextDeliverableId) projectData.nextDeliverableId = 1;
-                if (!projectData.nextAreaId) projectData.nextAreaId = 1;
-
-                // --- IMPORTANT FIX: Ensure areaData is an object for all deliverables on load ---
-                projectData.sections.forEach(sec => {
-                    ensureDeliverableDataInitialized(sec); // Changed name to reflect deliverable-level properties
-                });
-                projectTitleInput.value = projectData.title;
-            } else {
-                // Initialize with some default sections/deliverables if no data exists
-                initializeDefaultData();
-            }
-            populateDepartmentFilterDropdown(); // Use the filter population function
-        }
-
-
-        // --- Save to Firebase ---
-        function saveProjectData() {
-            try {
-                db.ref('projects/main').set(projectData, (error) => {
-                    if (error) {
-                        console.error("Firebase save failed, falling back to local storage:", error);
-                        saveProjectDataLocal();
-                        addChangeLogEntry("Data saved locally (Firebase error).", "warning");
-                        updateConnectivityIndicator(false); // Indicate offline/error
-                    } else {
-                        console.log("Data saved to Firebase.");
-                        updateDashboard();
-                        populateDepartmentFilterDropdown(); // Use the filter population function
-                        addChangeLogEntry("Data saved to cloud.", "success");
-                        updateConnectivityIndicator(true); // Indicate connected
-                    }
-                });
-            } catch (e) {
-                console.error("Firebase operation failed, falling back to local storage:", e);
-                saveProjectDataLocal();
-                addChangeLogEntry("Data saved locally (Firebase error).", "warning");
-                updateConnectivityIndicator(false); // Indicate offline/error
-            }
-        }
-
-        // --- Load from Firebase ---
-        function loadProjectData() {
-            db.ref('projects/main').once('value')
-                .then(snapshot => {
-                    const data = snapshot.val();
-                    if (data) {
-                        projectData = data;
-                        // Ensure default values for new properties in old data
-                        if (!projectData.title) projectData.title = "My Awesome Project";
-                        if (!projectData.sections) projectData.sections = [];
-                        if (!projectData.areas) projectData.areas = [];
-                        if (!projectData.nextSectionId) projectData.nextSectionId = 1;
-                        if (!projectData.nextDeliverableId) projectData.nextDeliverableId = 1;
-                        if (!projectData.nextAreaId) projectData.nextAreaId = 1;
-
-                        // Recursive fix for older data structures
-                        projectData.sections.forEach(sec => {
-                            ensureDeliverableDataInitialized(sec);
-                        });
-
-                        projectTitleInput.value = projectData.title;
-                        populateDepartmentFilterDropdown(); // Use the filter population function
-                        addChangeLogEntry("Data loaded from cloud.", "info");
-                        updateConnectivityIndicator(true); // Indicate connected
-                    } else {
-                        console.log("No data in Firebase, loading from local storage.");
-                        loadProjectDataLocal();
-                        addChangeLogEntry("No cloud data, loaded from local.", "info");
-                        updateConnectivityIndicator(true); // If local load is fallback, assume connectivity is fine, or it will be checked below
-                    }
-                })
-                .catch(error => {
-                    console.error("Firebase load failed, falling back to local storage:", error);
-                    loadProjectDataLocal();
-                    addChangeLogEntry("Failed to load from cloud, loaded from local.", "error");
-                    updateConnectivityIndicator(false); // Indicate offline/error
-                });
-        }
-
-        // Recursive helper to ensure deliverable properties and areaData are initialized
-        function ensureDeliverableDataInitialized(item) {
-            if (item.type === 'deliverable') {
-                // Ensure deliverable-level properties exist
-                if (item.amRequired === undefined) item.amRequired = '';
-                if (item.responsibleDepartment === undefined) item.responsibleDepartment = '';
-                if (item.notes === undefined) item.notes = '';
-
-                // Ensure areaData exists for all defined areas
-                if (!item.areaData) item.areaData = {};
-                projectData.areas.forEach(area => {
-                    if (!item.areaData[area.id]) {
-                        item.areaData[area.id] = { status: "NotStarted", dueDate: "" };
-                    }
-                });
-            }
-            if (item.children) {
-                item.children.forEach(child => ensureDeliverableDataInitialized(child));
-            }
-        }
-
-
-        function initializeDefaultData() {
-            projectData = {
-                title: "My Awesome Project",
-                sections: [
-                    {
-                        id: 's1', name: "Phase 1: Planning", type: "section", color: SECTION_COLORS[0], isCollapsed: false, children: [
-                            {
-                                id: 'd1', name: "Project Charter", type: "deliverable", amRequired: "Mandatory", responsibleDepartment: "Project Management Department", notes: "Initial draft submitted", areaData: {
-                                    area_col_1: { status: "Ready", dueDate: "2024-07-30" },
-                                    area_col_2: { status: "NotStarted", dueDate: "" }
-                                }
-                            },
-                            {
-                                id: 'd2', name: "Stakeholder Register", type: "deliverable", amRequired: "Recommended", responsibleDepartment: "Stakeholder & Communications Department", notes: "", areaData: {
-                                    area_col_1: { status: "InProgress", dueDate: "2024-08-05" },
-                                    area_col_2: { status: "NotStarted", dueDate: "" }
-                                }
-                            },
-                            {
-                                id: 'sub1', name: "Requirement Gathering", type: "subsection", children: [
-                                    {
-                                        id: 'd3', name: "Business Requirements Document (BRD)", type: "deliverable", amRequired: "Mandatory", responsibleDepartment: "Design & Engineering Department", notes: "Awaiting client sign-off", areaData: {
-                                            area_col_1: { status: "Review", dueDate: "2024-07-25" },
-                                            area_col_2: { status: "InProgress", dueDate: "2024-09-01" }
-                                        }
-                                    },
-                                    {
-                                        id: 'd4', name: "Functional Specification Document (FSD)", type: "deliverable", amRequired: "If applicable", responsibleDepartment: "IT & Systems Department", notes: "", areaData: {
-                                            area_col_1: { status: "InProgress", dueDate: "2024-08-15" },
-                                            area_col_2: { status: "NotStarted", dueDate: "" }
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        id: 's2', name: "Phase 2: Execution", type: "section", color: SECTION_COLORS[1], isCollapsed: false, children: [
-                            {
-                                id: 'd5', name: "System Design Document", type: "deliverable", amRequired: "Mandatory", responsibleDepartment: "Design & Engineering Department", notes: "Review with dev team", areaData: {
-                                    area_col_1: { status: "InProgress", dueDate: "2024-08-30" },
-                                    area_col_2: { status: "InProgress", dueDate: "2024-10-01" }
-                                }
-                            },
-                            {
-                                id: 'd6', name: "Module Development Complete", type: "deliverable", amRequired: "Mandatory", responsibleDepartment: "Construction Department", notes: "Started coding for module A", areaData: {
-                                    area_col_1: { status: "InProgress", dueDate: "2024-09-15" },
-                                    area_col_2: { status: "NotStarted", dueDate: "" }
-                                }
-                            }
-                        ]
-                    }
-                ],
-                areas: [{ id: 'area_col_1', name: 'Original Area' }, { id: 'area_col_2', name: 'New Area' }],
-                nextSectionId: 3,
-                nextDeliverableId: 7,
-                nextAreaId: 3 // Start from 3 as 1 and 2 are used for default areas
-            };
-            addChangeLogEntry("Default project data loaded.");
-            saveProjectData(); // Save to Firebase/Local after initializing defaults
-        }
-
-
-        // --- Render Table ---
         function renderTable() {
-            const tbody = projectTable.querySelector('tbody');
-            const theadRow = projectTable.querySelector('thead tr');
-            tbody.innerHTML = ''; // Clear existing rows
+            const tableHead = projectTable.querySelector('thead tr');
+            const tableBody = projectTable.querySelector('tbody');
 
-            // Clear and rebuild headers (for dynamic area columns)
-            theadRow.innerHTML = '';
-            theadRow.innerHTML += `<th class="sticky-col">Section / Deliverable</th>`;
+            // Clear existing headers and body
+            tableHead.innerHTML = `<th class="sticky-col">Section / Deliverable<div class="resizer"></div></th>`;
+            tableBody.innerHTML = '';
+
+            // Add area columns to header
             projectData.areas.forEach(area => {
-                theadRow.innerHTML += `
-                    <th>
-                        <div class="area-header-content">
-                            <span>${area.name}</span>
-                            <button class="btn-delete-area" data-area-id="${area.id}" title="Delete Area Column">&times;</button>
-                        </div>
-                    </th>`;
+                const th = document.createElement('th');
+                th.setAttribute('data-area-id', area.id);
+                th.innerHTML = `
+                    <div class="area-header-content">
+                        <span>${area.name}</span>
+                        <button class="btn-delete-area" data-area-id="${area.id}">&times;</button>
+                    </div>
+                `;
+                tableHead.appendChild(th);
             });
-            theadRow.innerHTML += `<th>Actions</th>`; // Add actions header
 
-            const allDeliverables = getAllDeliverables();
-            const currentDepartmentFilter = departmentFilter.value;
-            const currentStatusFilter = statusFilter.value;
-            const searchTerm = searchBar.value.toLowerCase();
-
+            // Add rows for sections, subsections, and deliverables
             projectData.sections.forEach(section => {
-                let sectionHasVisibleDeliverables = false;
-                // Check if any deliverable within this section (or its subsections) matches filters
-                const checkChildrenForVisibility = (children) => {
-                    return children.some(item => {
-                        if (item.type === 'deliverable') {
-                            const matchesSearch = searchTerm === '' || item.name.toLowerCase().includes(searchTerm) || item.notes.toLowerCase().includes(searchTerm) || item.responsibleDepartment.toLowerCase().includes(searchTerm) || item.amRequired.toLowerCase().includes(searchTerm);
-                            const matchesDepartment = currentDepartmentFilter === '' || item.responsibleDepartment === currentDepartmentFilter;
-                            // Check if any areaData for the deliverable matches the status filter
-                            const matchesStatus = currentStatusFilter === '' ||
-                                Object.values(item.areaData || {}).some(ad => ad.status === currentStatusFilter);
-
-                            return matchesSearch && matchesDepartment && matchesStatus;
-                        } else if (item.type === 'subsection' && item.children) {
-                            return checkChildrenForVisibility(item.children);
-                        }
-                        return false;
-                    });
-                };
-
-                sectionHasVisibleDeliverables = checkChildrenForVisibility(section.children);
-
-                // If section has no visible deliverables, skip rendering it
-                if (!sectionHasVisibleDeliverables && (searchTerm || currentDepartmentFilter || currentStatusFilter)) {
-                    return;
-                }
-
-                // Section Row
-                const sectionRow = document.createElement('tr');
+                // Section row
+                const sectionRow = tableBody.insertRow();
+                sectionRow.id = section.id;
                 sectionRow.classList.add('section-row');
                 if (section.isCollapsed) {
                     sectionRow.classList.add('collapsed');
                 }
-                sectionRow.setAttribute('data-section-id', section.id);
                 sectionRow.style.backgroundColor = section.color;
                 sectionRow.innerHTML = `
-                    <td class="sticky-col section-name-cell" colspan="${2 + projectData.areas.length}">
-                        <span class="section-toggle"></span>
+                    <td class="sticky-col section-name-cell" colspan="${projectData.areas.length + 1}">
+                        <div class="section-toggle" data-section-id="${section.id}"></div>
                         <span class="section-badge" style="background-color: ${section.color};"></span>
-                        <input type="text" value="${section.name}" class="editable-cell section-name-input" data-id="${section.id}" data-type="section">
+                        <span class="section-text">${section.name}</span>
+                        <button class="btn btn-danger btn-sm action-buttons" onclick="deleteSection('${section.id}')">حذف القسم</button>
                     </td>
                 `;
-                tbody.appendChild(sectionRow);
 
-                // Render children (subsections and deliverables)
-                renderChildren(section.children, tbody, section.isCollapsed, 1); // Indent level 1
+                // Add an empty cell for each area to maintain column structure if needed (though colspan handles it)
+                // for (let i = 0; i < projectData.areas.length; i++) { sectionRow.insertCell(); }
+
+
+                // Process children (subsections and deliverables)
+                renderChildren(tableBody, section.children, section.id, section.isCollapsed);
             });
 
-            addTableEventListeners(); // Attach event listeners after rendering
-            updateDashboard(); // Update dashboard after table re-render
+            // Attach event listeners for dynamic elements
+            attachEventListeners();
+            updateDashboard();
+            populateDepartmentFilterDropdown();
+            setupColumnResizing(); // Setup resizer after rendering
         }
 
-        function renderChildren(children, parentElement, parentCollapsed, indentLevel) {
+        function renderChildren(tableBody, children, parentId, isParentCollapsed) {
             children.forEach(item => {
                 if (item.type === 'subsection') {
-                    let subsectionHasVisibleDeliverables = false;
-                    const currentDepartmentFilter = departmentFilter.value;
-                    const currentStatusFilter = statusFilter.value;
-                    const searchTerm = searchBar.value.toLowerCase();
-
-                    const checkChildrenForVisibility = (children) => {
-                        return children.some(child => {
-                            if (child.type === 'deliverable') {
-                                const matchesSearch = searchTerm === '' || child.name.toLowerCase().includes(searchTerm) || child.notes.toLowerCase().includes(searchTerm) || child.responsibleDepartment.toLowerCase().includes(searchTerm) || child.amRequired.toLowerCase().includes(searchTerm);
-                                const matchesDepartment = currentDepartmentFilter === '' || child.responsibleDepartment === currentDepartmentFilter;
-                                const matchesStatus = currentStatusFilter === '' ||
-                                    Object.values(child.areaData || {}).some(ad => ad.status === currentStatusFilter);
-                                return matchesSearch && matchesDepartment && matchesStatus;
-                            }
-                            return false;
-                        });
-                    };
-
-                    subsectionHasVisibleDeliverables = checkChildrenForVisibility(item.children);
-
-                    if (!subsectionHasVisibleDeliverables && (searchTerm || currentDepartmentFilter || currentStatusFilter)) {
-                        return;
-                    }
-
-                    const subsectionRow = document.createElement('tr');
+                    const subsectionRow = tableBody.insertRow();
+                    subsectionRow.id = item.id;
                     subsectionRow.classList.add('subsection-row');
-                    if (parentCollapsed) {
-                        subsectionRow.style.display = 'none'; // Hide if parent section is collapsed
-                    }
-                    subsectionRow.setAttribute('data-subsection-id', item.id);
+                    if (isParentCollapsed) subsectionRow.style.display = 'none'; // Hide if parent is collapsed
+
                     subsectionRow.innerHTML = `
-                        <td class="sticky-col" colspan="${2 + projectData.areas.length}" style="padding-left: ${20 + (indentLevel * 20)}px;">
-                            <input type="text" value="${item.name}" class="editable-cell subsection-name-input" data-id="${item.id}" data-type="subsection">
+                        <td class="sticky-col section-name-cell" colspan="${projectData.areas.length + 1}" style="padding-left: 50px;">
+                            <span class="section-text"> - ${item.name}</span>
+                            <button class="btn btn-danger btn-sm action-buttons" onclick="deleteSubsection('${parentId}', '${item.id}')">حذف الفرع</button>
                         </td>
                     `;
-                    parentElement.appendChild(subsectionRow);
-                    renderChildren(item.children, parentElement, parentCollapsed, indentLevel + 1); // Recurse for deliverables in subsection
+                    // for (let i = 0; i < projectData.areas.length; i++) { subsectionRow.insertCell(); }
+
+                    // Render deliverables under this subsection
+                    renderChildren(tableBody, item.children, item.id, isParentCollapsed);
+
                 } else if (item.type === 'deliverable') {
-                    const currentDepartmentFilter = departmentFilter.value;
-                    const currentStatusFilter = statusFilter.value;
-                    const searchTerm = searchBar.value.toLowerCase();
+                    const deliverableRow = tableBody.insertRow();
+                    deliverableRow.id = item.id;
+                    deliverableRow.classList.add('deliverable-row');
+                    if (isParentCollapsed) deliverableRow.style.display = 'none'; // Hide if parent is collapsed
 
-                    const matchesSearch = searchTerm === '' ||
-                        item.name.toLowerCase().includes(searchTerm) ||
-                        item.notes.toLowerCase().includes(searchTerm) ||
-                        item.responsibleDepartment.toLowerCase().includes(searchTerm) ||
-                        item.amRequired.toLowerCase().includes(searchTerm);
-
-                    const matchesDepartment = currentDepartmentFilter === '' || item.responsibleDepartment === currentDepartmentFilter;
-                    const matchesStatus = currentStatusFilter === '' ||
-                        Object.values(item.areaData || {}).some(ad => ad.status === currentStatusFilter);
-
-
-                    if (!matchesSearch || !matchesDepartment || !matchesStatus) {
-                        return; // Skip rendering if filters don't match
-                    }
-
-                    const deliverableRow = document.createElement('tr');
-                    if (parentCollapsed) {
-                        deliverableRow.style.display = 'none'; // Hide if parent section is collapsed
-                    }
-                    deliverableRow.setAttribute('data-deliverable-id', item.id);
-
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0); // Reset time for accurate date comparison
-
-                    let isOverdueInAnyArea = false;
-                    projectData.areas.forEach(area => {
+                    const stickyCell = deliverableRow.insertCell();
+                    stickyCell.classList.add('sticky-col');
+                    
+                    // Check for overdue status
+                    const isOverdueDeliverable = projectData.areas.some(area => {
                         const areaInfo = item.areaData[area.id];
-                        if (areaInfo && areaInfo.status !== 'Ready' && areaInfo.dueDate) {
-                            const dueDate = new Date(areaInfo.dueDate);
-                            dueDate.setHours(0, 0, 0, 0);
-                            if (dueDate < today) {
-                                isOverdueInAnyArea = true;
-                            }
-                        }
+                        return areaInfo && areaInfo.status !== "Ready" && areaInfo.dueDate && new Date(areaInfo.dueDate) < new Date();
                     });
-
-                    if (isOverdueInAnyArea) {
+                    if (isOverdueDeliverable) {
                         deliverableRow.classList.add('overdue-deliverable');
                     }
 
-                    let cellsHtml = `
-                        <td class="sticky-col" style="padding-left: ${20 + (indentLevel * 20)}px;">
-                            <input type="text" value="${item.name}" class="editable-cell deliverable-name-input" data-id="${item.id}" data-type="deliverable-name">
-                            <div class="deliverable-meta">
-                                <div>AM Required: <input type="text" value="${item.amRequired}" class="editable-cell am-required-input" data-id="${item.id}" data-type="am-required" list="amRequiredList"></div>
-                                <div>Responsible Dept: <input type="text" value="${item.responsibleDepartment}" class="editable-cell responsible-department-input" data-id="${item.id}" data-type="responsible-department" list="departmentList"></div>
-                                ${item.notes ? `<span class="notes-icon">i<span class="notes-tooltip">${item.notes}</span></span>` : ''}
-                            </div>
-                        </td>
+                    stickyCell.innerHTML = `
+                        <div>
+                            <input type="text" value="${item.name}" class="editable-cell deliverable-name-input" data-deliverable-id="${item.id}" placeholder="اسم التسليم">
+                            ${item.notes ? `<span class="notes-icon" data-notes="${item.notes}">i<span class="notes-tooltip">${item.notes}</span></span>` : ''}
+                        </div>
+                        <div class="deliverable-meta">
+                            <label>AM Required:</label>
+                            <input type="text" value="${item.amRequired || ''}" class="editable-cell am-required-input" data-deliverable-id="${item.id}" list="amRequiredList" placeholder="AM Required">
+                            <label>Responsible Dept:</label>
+                            <input type="text" value="${item.responsibleDepartment || ''}" class="editable-cell responsible-department-input" data-deliverable-id="${item.id}" list="departmentList" placeholder="القسم المسؤول">
+                        </div>
+                        <div class="action-buttons">
+                            <button class="btn btn-danger btn-sm" onclick="deleteDeliverable('${parentId}', '${item.id}')">حذف</button>
+                        </div>
                     `;
 
                     projectData.areas.forEach(area => {
+                        const td = deliverableRow.insertCell();
                         const areaInfo = item.areaData[area.id] || { status: "NotStarted", dueDate: "" };
-                        const isAreaOverdue = areaInfo.status !== 'Ready' && areaInfo.dueDate && (new Date(areaInfo.dueDate).setHours(0,0,0,0) < today.setHours(0,0,0,0));
-                        cellsHtml += `
-                            <td>
-                                <select class="status-dropdown ${areaInfo.status}" data-id="${item.id}" data-area-id="${area.id}" data-type="status">
-                                    ${STATUS_OPTIONS.map(status => `<option value="${status}" ${areaInfo.status === status ? 'selected' : ''} class="${status}">${status}</option>`).join('')}
-                                </select>
-                                <input type="date" value="${areaInfo.dueDate}" class="date-input ${isAreaOverdue ? 'overdue-date-input' : ''}" data-id="${item.id}" data-area-id="${area.id}" data-type="due-date">
-                                ${isAreaOverdue ? '<span class="overdue-message">Date Overdue!</span>' : ''}
-                            </td>
+                        
+                        const isOverdue = areaInfo.status !== "Ready" && areaInfo.dueDate && new Date(areaInfo.dueDate) < new Date();
+                        const dueDateClass = isOverdue ? 'overdue-date-input' : '';
+                        const overdueMessage = isOverdue ? `<span class="overdue-message">Overdue by ${Math.ceil((new Date() - new Date(areaInfo.dueDate)) / (1000 * 60 * 60 * 24))} days</span>` : '';
+
+                        td.innerHTML = `
+                            <select class="status-dropdown ${areaInfo.status}" data-deliverable-id="${item.id}" data-area-id="${area.id}">
+                                ${STATUS_OPTIONS.map(status => `<option value="${status}" ${areaInfo.status === status ? 'selected' : ''}>${status}</option>`).join('')}
+                            </select>
+                            <input type="date" value="${areaInfo.dueDate}" class="date-input ${dueDateClass}" data-deliverable-id="${item.id}" data-area-id="${area.id}">
+                            ${overdueMessage}
                         `;
                     });
-
-                    cellsHtml += `
-                        <td>
-                            <div class="action-buttons">
-                                <button class="btn btn-danger btn-delete" data-id="${item.id}" data-type="deliverable">Delete</button>
-                            </div>
-                        </td>
-                    `;
-                    deliverableRow.innerHTML = cellsHtml;
-                    parentElement.appendChild(deliverableRow);
                 }
             });
         }
 
 
-        function addTableEventListeners() {
-            // Section toggle
-            document.querySelectorAll('.section-toggle').forEach(toggle => {
-                toggle.onclick = (e) => {
-                    const sectionRow = e.target.closest('.section-row');
-                    const sectionId = sectionRow.getAttribute('data-section-id');
-                    const section = projectData.sections.find(s => s.id === sectionId);
+        function attachEventListeners() {
+            // Project Title
+            projectTitleInput.onchange = (e) => {
+                projectData.title = e.target.value;
+                saveProjectData();
+                addChangeLogEntry(`Project title changed to: "${e.target.value}"`);
+            };
 
-                    if (section) {
-                        section.isCollapsed = !section.isCollapsed;
-                        sectionRow.classList.toggle('collapsed', section.isCollapsed);
+            // Add Area Button
+            addAreaBtn.onclick = showAddAreaModal;
 
-                        let nextSibling = sectionRow.nextElementSibling;
-                        while (nextSibling && (nextSibling.classList.contains('subsection-row') || nextSibling.getAttribute('data-deliverable-id'))) {
-                            nextSibling.style.display = section.isCollapsed ? 'none' : 'table-row';
-                            nextSibling = nextSibling.nextElementSibling;
-                        }
-                        saveProjectData();
-                    }
-                };
-            });
+            // Export/Import Buttons
+            exportExcelBtn.onclick = exportToExcel;
+            importExcelBtn.onclick = () => importExcelInput.click();
+            importExcelInput.onchange = importFromExcel;
 
+            // Print Button
+            printReportBtn.onclick = () => window.print();
 
-            // Editable cells (inputs/selects)
-            document.querySelectorAll('.editable-cell, .status-dropdown, .date-input').forEach(input => {
-                input.onchange = (e) => {
-                    const target = e.target;
-                    const id = target.getAttribute('data-id');
-                    const type = target.getAttribute('data-type');
-                    const areaId = target.getAttribute('data-area-id'); // Only for status/date
-                    const value = target.value;
+            // Reset Project Button
+            resetProjectBtn.onclick = promptResetProject;
 
-                    // Find the deliverable or section/subsection
-                    let found = false;
-                    projectData.sections.forEach(sec => {
-                        if (sec.id === id && type === 'section') {
-                            addChangeLogEntry(`Section "${sec.name}" renamed to "${value}".`);
-                            sec.name = value;
-                            found = true;
-                            return;
-                        }
-                        // Recursive search for deliverables and subsections
-                        const findAndUpdate = (children) => {
-                            children.forEach(item => {
-                                if (item.id === id) {
-                                    if (type === 'subsection') {
-                                        addChangeLogEntry(`Subsection "${item.name}" renamed to "${value}".`);
-                                        item.name = value;
-                                        found = true;
-                                    } else if (item.type === 'deliverable') {
-                                        if (type === 'deliverable-name') {
-                                            addChangeLogEntry(`Deliverable "${item.name}" renamed to "${value}".`);
-                                            item.name = value;
-                                            found = true;
-                                        } else if (type === 'am-required') {
-                                            addChangeLogEntry(`AM Required for "${item.name}" changed to "${value}".`);
-                                            item.amRequired = value;
-                                            found = true;
-                                        } else if (type === 'responsible-department') {
-                                            addChangeLogEntry(`Responsible Department for "${item.name}" changed to "${value}".`);
-                                            item.responsibleDepartment = value;
-                                            found = true;
-                                        } else if (type === 'status' && areaId) {
-                                            const oldStatus = item.areaData[areaId].status;
-                                            addChangeLogEntry(`Status for "${item.name}" in "${projectData.areas.find(a => a.id === areaId).name}" changed from "${oldStatus}" to "${value}".`);
-                                            item.areaData[areaId].status = value;
-                                            found = true;
-                                        } else if (type === 'due-date' && areaId) {
-                                            const oldDate = item.areaData[areaId].dueDate;
-                                            addChangeLogEntry(`Due Date for "${item.name}" in "${projectData.areas.find(a => a.id === areaId).name}" changed from "${oldDate}" to "${value}".`);
-                                            item.areaData[areaId].dueDate = value;
-                                            found = true;
-                                        }
-                                    }
-                                    if (found) return; // Stop searching once found
-                                }
-                                if (item.children && !found) {
-                                    findAndUpdate(item.children);
-                                }
-                            });
-                        };
-                        if (!found) findAndUpdate(sec.children);
-                    });
-                    saveProjectData();
-                    renderTable(); // Re-render to update any overdue highlighting etc.
-                };
-            });
+            // Search Bar
+            searchBar.onkeyup = filterTable;
+            searchBar.onchange = filterTable;
 
-            // Delete buttons (for deliverables)
-            document.querySelectorAll('.btn-delete').forEach(button => {
-                button.onclick = (e) => {
-                    if (confirm("Are you sure you want to delete this item?")) {
-                        const idToDelete = e.target.getAttribute('data-id');
-                        const typeToDelete = e.target.getAttribute('data-type');
+            // Status Filter
+            statusFilter.onchange = filterTable;
 
-                        if (typeToDelete === 'deliverable') {
-                            projectData.sections.forEach(sec => {
-                                sec.children = sec.children.filter(item => {
-                                    if (item.id === idToDelete) {
-                                        addChangeLogEntry(`Deleted deliverable: "${item.name}"`);
-                                        return false;
-                                    }
-                                    if (item.type === 'subsection' && item.children) {
-                                        item.children = item.children.filter(subItem => {
-                                            if (subItem.id === idToDelete) {
-                                                addChangeLogEntry(`Deleted deliverable: "${subItem.name}"`);
-                                                return false;
-                                            }
-                                            return true;
-                                        });
-                                    }
-                                    return true;
-                                });
-                            });
-                        }
-                        saveProjectData();
-                        renderTable();
-                    }
-                };
-            });
+            // Department Filter
+            departmentFilter.onchange = filterTable;
 
-            // NEW: Delete Area Column button
-            document.querySelectorAll('.btn-delete-area').forEach(button => {
-                button.onclick = (e) => {
-                    const areaId = e.target.getAttribute('data-area-id');
-                    deleteAreaColumn(areaId);
-                };
-            });
-        }
+            // Add Section / Deliverables button
+            addSectionAndDeliverablesBtn.onclick = showAddSectionDeliverablesModal;
+            addDeliverableEntryBtn.onclick = () => addDeliverableEntry();
 
-        // NEW: Function to delete an Area Column
-        function deleteAreaColumn(areaIdToDelete) {
-            const areaToDelete = projectData.areas.find(area => area.id === areaIdToDelete);
-            if (!areaToDelete) {
-                console.warn(`Area with ID ${areaIdToDelete} not found.`);
-                return;
-            }
+            // Change Log Close button
+            changeLogCloseBtn.onclick = () => document.querySelector('.change-log-container').style.display = 'none';
 
-            if (!confirm(`Are you sure you want to delete the column "${areaToDelete.name}"? This will also remove all associated status and due date data for this column from all deliverables.`)) {
-                return;
-            }
-
-            // Remove the area from the projectData.areas array
-            projectData.areas = projectData.areas.filter(area => area.id !== areaIdToDelete);
-
-            // Recursively remove the areaData for this column from all deliverables
-            function removeAreaFromDeliverables(items) {
-                items.forEach(item => {
-                    if (item.type === 'deliverable' && item.areaData) {
-                        delete item.areaData[areaIdToDelete];
-                    }
-                    if (item.children) {
-                        removeAreaFromDeliverables(item.children);
-                    }
-                });
-            }
-            projectData.sections.forEach(section => removeAreaFromDeliverables([section])); // Pass section in an array to start recursion
-
-            addChangeLogEntry(`Deleted area column: "${areaToDelete.name}"`);
-            saveProjectData();
-            renderTable();
-            alert(`Column "${areaToDelete.name}" and its data have been deleted successfully.`);
-        }
-
-
-        // --- Dashboard & Stats ---
-        function getAllDeliverables() {
-            const deliverables = [];
-            projectData.sections.forEach(section => {
-                function traverse(item) {
-                    if (item.type === 'deliverable') {
-                        deliverables.push(item);
-                    }
-                    if (item.children) {
-                        item.children.forEach(child => traverse(child));
-                    }
+            // Delegate events for dynamically added elements (inputs, selects, toggles, delete area buttons)
+            projectTable.onchange = (e) => {
+                if (e.target.classList.contains('status-dropdown')) {
+                    const deliverableId = e.target.dataset.deliverableId;
+                    const areaId = e.target.dataset.areaId;
+                    const newStatus = e.target.value;
+                    updateDeliverableStatus(deliverableId, areaId, newStatus);
+                    e.target.className = `status-dropdown ${newStatus}`; // Update class for styling
+                } else if (e.target.classList.contains('date-input')) {
+                    const deliverableId = e.target.dataset.deliverableId;
+                    const areaId = e.target.dataset.areaId;
+                    const newDate = e.target.value;
+                    updateDeliverableDueDate(deliverableId, areaId, newDate);
+                } else if (e.target.classList.contains('deliverable-name-input')) {
+                    const deliverableId = e.target.dataset.deliverableId;
+                    const newName = e.target.value.trim();
+                    updateDeliverableName(deliverableId, newName);
+                } else if (e.target.classList.contains('am-required-input')) {
+                    const deliverableId = e.target.dataset.deliverableId;
+                    const newValue = e.target.value.trim();
+                    updateDeliverableAMRequired(deliverableId, newValue);
+                } else if (e.target.classList.contains('responsible-department-input')) {
+                    const deliverableId = e.target.dataset.deliverableId;
+                    const newValue = e.target.value.trim();
+                    updateDeliverableResponsibleDepartment(deliverableId, newValue);
                 }
-                traverse(section);
+            };
+
+            projectTable.onclick = (e) => {
+                if (e.target.classList.contains('section-toggle')) {
+                    toggleSectionCollapse(e.target.dataset.sectionId);
+                } else if (e.target.classList.contains('btn-delete-area')) {
+                    deleteAreaColumn(e.target.dataset.areaId);
+                }
+            };
+        }
+
+        // --- Data Update Functions (for individual cells, auto-saves) ---
+
+        function updateDeliverableStatus(deliverableId, areaId, newStatus) {
+            findDeliverable(deliverableId, (deliverable) => {
+                if (!deliverable.areaData) deliverable.areaData = {};
+                if (!deliverable.areaData[areaId]) deliverable.areaData[areaId] = {};
+                const oldStatus = deliverable.areaData[areaId].status;
+                deliverable.areaData[areaId].status = newStatus;
+                addChangeLogEntry(`Status of "${deliverable.name}" in Area "${projectData.areas.find(a => a.id === areaId)?.name || areaId}" changed from "${oldStatus}" to "${newStatus}"`);
+                saveProjectData();
+                updateDashboard();
+                renderTable(); // Re-render to update overdue styling potentially
+            });
+        }
+
+        function updateDeliverableDueDate(deliverableId, areaId, newDate) {
+            findDeliverable(deliverableId, (deliverable) => {
+                if (!deliverable.areaData) deliverable.areaData = {};
+                if (!deliverable.areaData[areaId]) deliverable.areaData[areaId] = {};
+                const oldDate = deliverable.areaData[areaId].dueDate;
+                deliverable.areaData[areaId].dueDate = newDate;
+                addChangeLogEntry(`Due Date of "${deliverable.name}" in Area "${projectData.areas.find(a => a.id === areaId)?.name || areaId}" changed from "${oldDate || 'empty'}" to "${newDate || 'empty'}"`);
+                saveProjectData();
+                updateDashboard();
+                renderTable(); // Re-render to update overdue styling
+            });
+        }
+
+        function updateDeliverableName(deliverableId, newName) {
+            findDeliverable(deliverableId, (deliverable) => {
+                const oldName = deliverable.name;
+                deliverable.name = newName;
+                addChangeLogEntry(`Deliverable name changed from "${oldName}" to "${newName}"`);
+                saveProjectData();
+            });
+        }
+
+        function updateDeliverableAMRequired(deliverableId, newValue) {
+            findDeliverable(deliverableId, (deliverable) => {
+                const oldValue = deliverable.amRequired;
+                deliverable.amRequired = newValue;
+                addChangeLogEntry(`AM Required for "${deliverable.name}" changed from "${oldValue || 'empty'}" to "${newValue || 'empty'}"`);
+                saveProjectData();
+                populateDatalists(); // Update datalist if a new value is added
+            });
+        }
+
+        function updateDeliverableResponsibleDepartment(deliverableId, newValue) {
+            findDeliverable(deliverableId, (deliverable) => {
+                const oldValue = deliverable.responsibleDepartment;
+                deliverable.responsibleDepartment = newValue;
+                addChangeLogEntry(`Responsible Department for "${deliverable.name}" changed from "${oldValue || 'empty'}" to "${newValue || 'empty'}"`);
+                saveProjectData();
+                populateDepartmentFilterDropdown(); // Update filter dropdown if a new department is added
+                populateDatalists(); // Update datalist if a new value is added
+            });
+        }
+
+        // --- Data Traversal/Manipulation Helpers ---
+
+        // Helper to find a deliverable by ID and execute a callback
+        function findDeliverable(deliverableId, callback, collection = projectData.sections) {
+            for (const section of collection) {
+                if (section.type === 'deliverable' && section.id === deliverableId) {
+                    callback(section);
+                    return true;
+                }
+                if (section.children) {
+                    const found = findDeliverable(deliverableId, callback, section.children);
+                    if (found) return true;
+                }
+            }
+            return false;
+        }
+
+        // Helper to get all deliverables
+        function getAllDeliverables(collection = projectData.sections, deliverables = []) {
+            collection.forEach(item => {
+                if (item.type === 'deliverable') {
+                    deliverables.push(item);
+                }
+                if (item.children) {
+                    getAllDeliverables(item.children, deliverables);
+                }
             });
             return deliverables;
         }
 
-        function calculateDashboardStats() {
+        // --- UI Interactions ---
+
+        function toggleSectionCollapse(sectionId) {
+            const section = projectData.sections.find(s => s.id === sectionId);
+            if (section) {
+                section.isCollapsed = !section.isCollapsed;
+                addChangeLogEntry(`${section.name} section ${section.isCollapsed ? 'collapsed' : 'expanded'}.`);
+                saveProjectData(); // Save collapse state
+                renderTable(); // Re-render to apply collapse/expand
+            }
+        }
+
+        function deleteSection(sectionId) {
+            if (confirm("هل أنت متأكد أنك تريد حذف هذا القسم بكل تسليماته وأقسامه الفرعية؟ هذا الإجراء لا يمكن التراجع عنه.")) {
+                const initialLength = projectData.sections.length;
+                projectData.sections = projectData.sections.filter(sec => sec.id !== sectionId);
+                if (projectData.sections.length < initialLength) {
+                    addChangeLogEntry(`Section with ID ${sectionId} deleted.`);
+                    saveProjectData();
+                    renderTable();
+                }
+            }
+        }
+
+        function deleteSubsection(sectionId, subsectionId) {
+            if (confirm("هل أنت متأكد أنك تريد حذف هذا القسم الفرعي بكل تسليماته؟ هذا الإجراء لا يمكن التراجع عنه.")) {
+                const section = projectData.sections.find(sec => sec.id === sectionId);
+                if (section && section.children) {
+                    const initialLength = section.children.length;
+                    section.children = section.children.filter(sub => sub.id !== subsectionId);
+                    if (section.children.length < initialLength) {
+                        addChangeLogEntry(`Subsection with ID ${subsectionId} deleted from section ${sectionId}.`);
+                        saveProjectData();
+                        renderTable();
+                    }
+                }
+            }
+        }
+
+        function deleteDeliverable(parentId, deliverableId) {
+            if (confirm("هل أنت متأكد أنك تريد حذف هذا التسليم؟ هذا الإجراء لا يمكن التراجع عنه.")) {
+                // Find the parent (section or subsection)
+                let parentCollection = projectData.sections;
+                let foundParent = false;
+                function searchAndDelete(items) {
+                    for (let i = 0; i < items.length; i++) {
+                        if (items[i].id === parentId) {
+                            items[i].children = items[i].children.filter(d => d.id !== deliverableId);
+                            foundParent = true;
+                            return;
+                        }
+                        if (items[i].children) {
+                            searchAndDelete(items[i].children);
+                            if (foundParent) return;
+                        }
+                    }
+                }
+                searchAndDelete(parentCollection);
+
+                if (foundParent) {
+                    addChangeLogEntry(`Deliverable with ID ${deliverableId} deleted.`);
+                    saveProjectData();
+                    renderTable();
+                }
+            }
+        }
+
+        function deleteAreaColumn(areaId) {
+            if (confirm("هل أنت متأكد أنك تريد حذف هذا العمود (المنطقة)؟ سيؤدي هذا إلى إزالة جميع البيانات المرتبطة بهذا العمود من جميع التسليمات.")) {
+                // Remove the area from projectData.areas
+                projectData.areas = projectData.areas.filter(area => area.id !== areaId);
+
+                // Remove the areaData for this column from all deliverables
+                getAllDeliverables().forEach(deliverable => {
+                    if (deliverable.areaData && deliverable.areaData[areaId]) {
+                        delete deliverable.areaData[areaId];
+                    }
+                });
+                addChangeLogEntry(`Area column with ID ${areaId} deleted.`);
+                saveProjectData();
+                renderTable();
+            }
+        }
+
+        function filterTable() {
+            const searchText = searchBar.value.toLowerCase();
+            const selectedStatus = statusFilter.value;
+            const selectedDepartment = departmentFilter.value;
+
+            const allRows = projectTable.querySelectorAll('tbody tr');
             const allDeliverables = getAllDeliverables();
-            let total = allDeliverables.length;
-            let ready = 0;
-            let inProgress = 0;
-            let overdue = 0;
-            let totalAreasTracked = 0; // Number of status/due date entries across all deliverables/areas
-            let readyAreaEntries = 0; // Number of 'Ready' status entries
 
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-
+            // First, determine which deliverables match the filters
+            const matchingDeliverableIds = new Set();
             allDeliverables.forEach(deliverable => {
-                let isDeliverableOverdue = false;
-                
-                // Track if deliverable has any 'InProgress' or 'Review' status across its areas
-                let hasInProgressOrReview = false; 
+                const matchesSearch = searchText === '' ||
+                    deliverable.name.toLowerCase().includes(searchText) ||
+                    (deliverable.amRequired && deliverable.amRequired.toLowerCase().includes(searchText)) ||
+                    (deliverable.responsibleDepartment && deliverable.responsibleDepartment.toLowerCase().includes(searchText)) ||
+                    (deliverable.notes && deliverable.notes.toLowerCase().includes(searchText));
 
-                if (deliverable.areaData) {
-                    Object.values(deliverable.areaData).forEach(areaInfo => {
-                        totalAreasTracked++;
-                        if (areaInfo.status === 'Ready') {
-                            readyAreaEntries++;
-                        } else if (areaInfo.status === 'InProgress' || areaInfo.status === 'Review') {
-                            hasInProgressOrReview = true;
-                        }
+                const matchesStatus = selectedStatus === '' ||
+                    projectData.areas.some(area => deliverable.areaData[area.id]?.status === selectedStatus);
 
-                        if (areaInfo.status !== 'Ready' && areaInfo.dueDate) {
-                            const dueDate = new Date(areaInfo.dueDate);
-                            dueDate.setHours(0, 0, 0, 0);
-                            if (dueDate < today) {
-                                isDeliverableOverdue = true;
-                            }
-                        }
-                    });
-                }
-                
-                // Determine deliverable status for dashboard counts
-                const deliverableStatuses = Object.values(deliverable.areaData || {}).map(ad => ad.status);
+                const matchesDepartment = selectedDepartment === '' ||
+                    deliverable.responsibleDepartment === selectedDepartment;
 
-                // A deliverable is 'Ready' for dashboard if ALL its areaData entries are 'Ready'
-                if (deliverableStatuses.length > 0 && deliverableStatuses.every(status => status === 'Ready')) {
-                    ready++;
-                } else if (hasInProgressOrReview) { // If not fully Ready, but has InProgress/Review
-                    inProgress++;
-                }
-                
-                // A deliverable is 'Overdue' if any of its areaData entries are overdue (and not 'Ready' for that specific area)
-                if (isDeliverableOverdue) {
-                    overdue++;
+                if (matchesSearch && matchesStatus && matchesDepartment) {
+                    matchingDeliverableIds.add(deliverable.id);
                 }
             });
 
-            // Calculate overall project progress based on 'Ready' area entries
-            const overallProgressPercentage = totalAreasTracked > 0 ? (readyAreaEntries / totalAreasTracked) * 100 : 0;
-
-            return {
-                total,
-                ready,
-                inProgress,
-                overdue,
-                overallProgressPercentage: overallProgressPercentage.toFixed(1) // One decimal place
-            };
+            // Iterate through all rows and decide visibility
+            allRows.forEach(row => {
+                if (row.classList.contains('section-row') || row.classList.contains('subsection-row')) {
+                    // For sections/subsections, we need to check if any of their *descendant deliverables* match
+                    const sectionId = row.id; // Could be section or subsection ID
+                    const sectionOrSubsection = findItemById(sectionId, projectData.sections);
+                    if (sectionOrSubsection) {
+                        const descendantDeliverables = getAllDeliverables([sectionOrSubsection]);
+                        const hasMatchingDeliverable = descendantDeliverables.some(d => matchingDeliverableIds.has(d.id));
+                        row.style.display = hasMatchingDeliverable ? '' : 'none';
+                    }
+                } else if (row.classList.contains('deliverable-row')) {
+                    row.style.display = matchingDeliverableIds.has(row.id) ? '' : 'none';
+                }
+            });
         }
 
+        function findItemById(id, collection) {
+            for (const item of collection) {
+                if (item.id === id) {
+                    return item;
+                }
+                if (item.children) {
+                    const found = findItemById(id, item.children);
+                    if (found) return found;
+                }
+            }
+            return null;
+        }
+
+        // --- Dashboard Update ---
 
         function updateDashboard() {
-            const stats = calculateDashboardStats();
-            totalDeliverablesSpan.textContent = stats.total;
-            readyDeliverablesSpan.textContent = stats.ready;
-            inProgressDeliverablesSpan.textContent = stats.inProgress;
-            overdueDeliverablesSpan.textContent = stats.overdue;
-            progressPercentageSpan.textContent = `${stats.overallProgressPercentage}%`;
+            const allDelivs = getAllDeliverables();
+            const total = allDelivs.length;
+            let readyCount = 0;
+            let inProgressCount = 0;
+            let overdueCount = 0;
 
-            if (chartJsLoaded) {
-                renderDonutChart(stats.readyAreaEntries, stats.totalAreasTracked - stats.readyAreaEntries); // Use specific counts for chart
-            }
-        }
+            allDelivs.forEach(deliv => {
+                // Determine status for dashboard based on all areas
+                const statuses = projectData.areas.map(area => deliv.areaData[area.id]?.status || 'NotStarted');
+                const dueDates = projectData.areas.map(area => deliv.areaData[area.id]?.dueDate || '');
 
-        // Modified renderDonutChart to use `readyAreaEntries` and `totalAreasTracked`
-        function renderDonutChart(readyAreaEntriesCount, otherAreaEntriesCount) {
-            const ctx = progressDonutChartCanvas.getContext('2d');
+                const isReadyInAllAreas = statuses.every(status => status === "Ready");
+                const hasInProgress = statuses.some(status => status === "InProgress" || status === "Review");
+                const hasOverdue = statuses.some((status, index) => {
+                    const dueDate = dueDates[index];
+                    return status !== "Ready" && dueDate && new Date(dueDate) < new Date();
+                });
+
+                if (isReadyInAllAreas) {
+                    readyCount++;
+                } else if (hasOverdue) { // Overdue takes precedence over InProgress for dashboard count
+                    overdueCount++;
+                } else if (hasInProgress) {
+                    inProgressCount++;
+                }
+            });
+
+            totalDeliverablesSpan.textContent = total;
+            readyDeliverablesSpan.textContent = readyCount;
+            inProgressDeliverablesSpan.textContent = inProgressCount;
+            overdueDeliverablesSpan.textContent = overdueCount;
+
+            // Update donut chart
+            const completedPercentage = total > 0 ? ((readyCount / total) * 100).toFixed(0) : 0;
+            progressPercentageSpan.textContent = `${completedPercentage}%`;
 
             if (progressChartInstance) {
-                progressChartInstance.destroy(); // Destroy previous chart instance
+                progressChartInstance.destroy();
             }
 
+            const ctx = progressDonutChartCanvas.getContext('2d');
             progressChartInstance = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
-                    labels: ['Ready Areas', 'Other Areas'],
+                    labels: ['Ready', 'In Progress', 'Overdue', 'Not Started'],
                     datasets: [{
-                        data: [readyAreaEntriesCount, otherAreaEntriesCount],
+                        data: [readyCount, inProgressCount, overdueCount, total - readyCount - inProgressCount - overdueCount],
                         backgroundColor: [
                             'var(--primary-color)', // Ready
-                            '#ccc' // Other
+                            'var(--secondary-color)', // In Progress
+                            'var(--danger-color)', // Overdue
+                            '#ccc' // Not Started / Other
                         ],
-                        borderColor: [
-                            'white',
-                            'white'
-                        ],
-                        borderWidth: 2
+                        borderWidth: 0
                     }]
                 },
                 options: {
@@ -2056,95 +1977,216 @@
                             display: false // Hide legend
                         },
                         tooltip: {
-                            enabled: false // Hide tooltips on hover
+                            enabled: true // Enable tooltips on hover
                         }
                     }
                 }
             });
         }
 
+        // --- Excel Import/Export ---
 
-        // --- Filtering ---
-        function populateDepartmentFilter() {
-            // Store the current selection before clearing
-            const currentSelectedDepartment = departmentFilter.value;
+        function exportToExcel() {
+            // Flatten the project data into a sheet-friendly format
+            const dataToExport = [];
+            dataToExport.push(["Section", "Subsection", "Deliverable Name", "AM Required", "Responsible Department", "Notes", ...projectData.areas.flatMap(a => [`${a.name} Status`, `${a.name} Due Date`])]);
 
-            const departments = new Set();
-            getAllDeliverables().forEach(d => {
-                if (d.responsibleDepartment) {
-                    departments.add(d.responsibleDepartment);
+            projectData.sections.forEach(section => {
+                function processItem(item, currentSection, currentSubsection = "") {
+                    if (item.type === 'section') {
+                        currentSection = item.name;
+                        currentSubsection = "";
+                    } else if (item.type === 'subsection') {
+                        currentSubsection = item.name;
+                    } else if (item.type === 'deliverable') {
+                        const row = [currentSection, currentSubsection, item.name, item.amRequired || '', item.responsibleDepartment || '', item.notes || ''];
+                        projectData.areas.forEach(area => {
+                            const areaInfo = item.areaData[area.id] || {};
+                            row.push(areaInfo.status || 'NotStarted');
+                            row.push(areaInfo.dueDate || '');
+                        });
+                        dataToExport.push(row);
+                    }
+
+                    if (item.children) {
+                        item.children.forEach(child => processItem(child, currentSection, currentSubsection));
+                    }
                 }
+                processItem(section, "");
             });
 
-            // Also add predefined departments to the filter dropdown options
-            PREDEFINED_DEPARTMENTS.forEach(dept => departments.add(dept));
-
-
-            departmentFilter.innerHTML = '<option value="">All Departments</option>';
-            Array.from(departments).sort().forEach(dept => {
-                const option = document.createElement('option');
-                option.value = dept;
-                option.textContent = dept;
-                departmentFilter.appendChild(option);
-            });
-
-            // Restore previous selection
-            departmentFilter.value = currentSelectedDepartment;
+            const ws = XLSX.utils.aoa_to_sheet(dataToExport);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Project Data");
+            XLSX.writeFile(wb, `${projectData.title.replace(/[^a-z0-9]/gi, '_')}_Project_Tracker.xlsx`);
+            addChangeLogEntry("بيانات المشروع تم تصديرها إلى Excel.");
         }
 
 
-        function filterTable() {
-            renderTable(); // Re-render table to apply filters
-        }
+        function importFromExcel(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                return;
+            }
 
-        // --- Event Listeners ---
-        function setupEventListeners() {
-            projectTitleInput.onchange = (e) => {
-                addChangeLogEntry(`Project title changed from "${projectData.title}" to "${e.target.value}".`);
-                projectData.title = e.target.value;
-                saveProjectData();
-            };
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-            addAreaBtn.onclick = showAddAreaModal;
-            addSectionAndDeliverablesBtn.onclick = showAddSectionDeliverablesModal; // New button for new modal
-            addDeliverableEntryBtn.onclick = () => addDeliverableEntry(); // For adding more deliverables in the modal
+                    if (json.length < 2) {
+                        alert("ملف Excel فارغ أو لا يحتوي على بيانات كافية.");
+                        return;
+                    }
 
-            searchBar.onkeyup = filterTable;
-            statusFilter.onchange = filterTable;
-            departmentFilter.onchange = filterTable;
+                    const headers = json[0];
+                    const rows = json.slice(1);
 
-            exportExcelBtn.onclick = exportToExcel;
-            importExcelBtn.onclick = () => importExcelInput.click();
-            importExcelInput.onchange = importFromExcel;
-            printReportBtn.onclick = () => window.print();
-            resetProjectBtn.onclick = resetProject;
+                    // Reinitialize project data for import
+                    projectData = {
+                        title: projectData.title, // Keep existing title or default
+                        sections: [],
+                        areas: [],
+                        nextSectionId: 1,
+                        nextDeliverableId: 1,
+                        nextAreaId: 1
+                    };
 
-            changeLogCloseBtn.onclick = () => {
-                document.querySelector('.change-log-container').style.display = 'none';
-            };
+                    const newAreas = new Set();
+                    const areaStatusRegex = /^(.*) Status$/;
+                    const areaDueDateRegex = /^(.*) Due Date$/;
 
-            // Connectivity Indicator hover
-            const connectivityIndicator = document.getElementById('connectivityIndicator');
-            connectivityIndicator.onmouseover = () => {
-                if (navigator.onLine) {
-                    connectivityIndicator.setAttribute('data-tooltip', 'Online (Connected)');
-                } else {
-                    connectivityIndicator.setAttribute('data-tooltip', 'Offline (No Internet)');
+                    // Extract new areas from headers
+                    headers.forEach(header => {
+                        let match = header.match(areaStatusRegex);
+                        if (match) newAreas.add(match[1]);
+                        match = header.match(areaDueDateRegex);
+                        if (match) newAreas.add(match[1]);
+                    });
+
+                    // Add new areas to projectData.areas
+                    Array.from(newAreas).sort().forEach(areaName => {
+                        projectData.areas.push({ id: `area_col_${projectData.nextAreaId++}`, name: areaName });
+                    });
+
+
+                    rows.forEach(row => {
+                        const rowData = {};
+                        headers.forEach((header, index) => {
+                            rowData[header] = row[index];
+                        });
+
+                        const sectionName = rowData["Section"]?.trim();
+                        const subsectionName = rowData["Subsection"]?.trim();
+                        const deliverableName = rowData["Deliverable Name"]?.trim();
+
+                        if (!deliverableName) return; // Skip rows without deliverable name
+
+                        let targetSection = projectData.sections.find(s => s.name === sectionName);
+                        if (!targetSection) {
+                            targetSection = {
+                                id: `s${projectData.nextSectionId++}`,
+                                name: sectionName,
+                                type: "section",
+                                color: SECTION_COLORS[colorIndex++ % SECTION_COLORS.length],
+                                isCollapsed: false,
+                                children: []
+                            };
+                            projectData.sections.push(targetSection);
+                        }
+
+                        let parentForDeliverables = targetSection.children;
+                        if (subsectionName) {
+                            let targetSubsection = targetSection.children.find(
+                                child => child.type === 'subsection' && child.name === subsectionName
+                            );
+                            if (!targetSubsection) {
+                                targetSubsection = {
+                                    id: `sub${projectData.nextSectionId++}`,
+                                    name: subsectionName,
+                                    type: "subsection",
+                                    children: []
+                                };
+                                targetSection.children.push(targetSubsection);
+                            }
+                            parentForDeliverables = targetSubsection.children;
+                        }
+
+                        const newDeliverable = {
+                            id: `d${projectData.nextDeliverableId++}`,
+                            name: deliverableName,
+                            type: "deliverable",
+                            amRequired: rowData["AM Required"] || '',
+                            responsibleDepartment: rowData["Responsible Department"] || '',
+                            notes: rowData["Notes"] || '',
+                            areaData: {}
+                        };
+
+                        projectData.areas.forEach(area => {
+                            const statusHeader = `${area.name} Status`;
+                            const dueDateHeader = `${area.name} Due Date`;
+                            newDeliverable.areaData[area.id] = {
+                                status: rowData[statusHeader] || 'NotStarted',
+                                dueDate: rowData[dueDateHeader] ? new Date(rowData[dueDateHeader]).toISOString().split('T')[0] : '' // Format date to YYYY-MM-DD
+                            };
+                        });
+                        parentForDeliverables.push(newDeliverable);
+                    });
+
+                    saveProjectData();
+                    renderTable();
+                    alert("تم استيراد البيانات من ملف Excel بنجاح!");
+                    addChangeLogEntry("تم استيراد بيانات المشروع من Excel.");
+
+                } catch (e) {
+                    console.error("Error importing Excel:", e);
+                    alert("خطأ في استيراد ملف Excel. يرجى التأكد من تنسيق الملف.");
+                } finally {
+                    event.target.value = ''; // Clear the file input
                 }
             };
-
-            // Initial connectivity check
-            fetchConnectivityStatus();
-            setInterval(fetchConnectivityStatus, 5000); // Check every 5 seconds
-            window.addEventListener('online', fetchConnectivityStatus);
-            window.addEventListener('offline', fetchConnectivityStatus);
+            reader.readAsArrayBuffer(file);
         }
 
-        // --- Populate Datalists ---
+        // --- Change Log Functions ---
+
+        function addChangeLogEntry(message) {
+            const timestamp = new Date().toLocaleString('ar-EG', {
+                hour: '2-digit',
+                minute: '2-digit',
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+            changeLogEntries.unshift(`[${timestamp}] ${message}`); // Add to the beginning
+            if (changeLogEntries.length > MAX_CHANGE_LOG_ENTRIES) {
+                changeLogEntries.pop(); // Remove oldest entry if max is exceeded
+            }
+            updateChangeLogDisplay();
+        }
+
+        function updateChangeLogDisplay() {
+            changeLogList.innerHTML = changeLogEntries.map(entry => `<li>${entry}</li>`).join('');
+        }
+
+        // --- Initial Load ---
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadProjectData(); // Load data from Firebase on startup
+            attachEventListeners();
+            populateDatalists();
+            updateChangeLogDisplay(); // Display initial change log (if any)
+            updateDashboard(); // Initial dashboard update
+        });
+
         function populateDatalists() {
             const departmentDatalist = document.getElementById('departmentList');
             departmentDatalist.innerHTML = '';
-            PREDEFINED_DEPARTMENTS.forEach(dept => {
+            getAllDepartments().forEach(dept => {
                 const option = document.createElement('option');
                 option.value = dept;
                 departmentDatalist.appendChild(option);
@@ -2157,281 +2199,92 @@
                 option.value = optionText;
                 amRequiredDatalist.appendChild(option);
             });
+
+            // Add any custom AM Required values from existing data
+            const existingAmRequired = new Set();
+            getAllDeliverables().forEach(d => {
+                if (d.amRequired && !AM_REQUIRED_OPTIONS.includes(d.amRequired)) {
+                    existingAmRequired.add(d.amRequired);
+                }
+            });
+            Array.from(existingAmRequired).sort().forEach(val => {
+                const option = document.createElement('option');
+                option.value = val;
+                amRequiredDatalist.appendChild(option);
+            });
         }
 
+        function promptResetProject() {
+            const confirmationCode = "250389";
+            const userInput = prompt(`لإعادة تعيين المشروع بالكامل ومسح جميع البيانات، يرجى إدخال الكود التالي: ${confirmationCode}\n\nهذا الإجراء لا يمكن التراجع عنه!`);
 
-        // --- Export to Excel ---
-        function exportToExcel() {
-            const ws_data = [];
-
-            // Main Headers: Section / Deliverable, then Area Names, then Actions
-            const headerRow = ['Section / Deliverable'];
-            projectData.areas.forEach(area => {
-                headerRow.push(area.name + ' - Status');
-                headerRow.push(area.name + ' - Due Date');
-            });
-            headerRow.push('AM Required'); // Add these directly to the excel output headers
-            headerRow.push('Responsible Department');
-            headerRow.push('Notes');
-            ws_data.push(headerRow);
-
-            // Populate data rows
-            projectData.sections.forEach(section => {
-                // Section row
-                const sectionRowData = [section.name];
-                for (let i = 0; i < projectData.areas.length * 2 + 3; i++) { // +3 for AM, Dept, Notes
-                    sectionRowData.push(''); // Empty cells for areas in section row
+            if (userInput === confirmationCode) {
+                if (confirm("تم إدخال الكود الصحيح. هل أنت متأكد تمامًا أنك تريد مسح جميع بيانات المشروع من Firebase؟")) {
+                    resetProject();
+                } else {
+                    alert("تم إلغاء عملية إعادة تعيين المشروع.");
                 }
-                ws_data.push(sectionRowData);
-
-                function addChildrenToExcel(children, indent = 0) {
-                    children.forEach(item => {
-                        const rowData = [];
-                        const indentStr = ' '.repeat(indent * 2); // 2 spaces per indent level
-
-                        if (item.type === 'subsection') {
-                            rowData.push(`${indentStr}▶ ${item.name}`);
-                            for (let i = 0; i < projectData.areas.length * 2 + 3; i++) {
-                                rowData.push(''); // Empty cells for areas in subsection row
-                            }
-                            ws_data.push(rowData);
-                            addChildrenToExcel(item.children, indent + 1);
-                        } else if (item.type === 'deliverable') {
-                            rowData.push(`${indentStr}- ${item.name}`);
-
-                            projectData.areas.forEach(area => {
-                                const areaInfo = item.areaData[area.id] || { status: "", dueDate: "" };
-                                rowData.push(areaInfo.status);
-                                rowData.push(areaInfo.dueDate);
-                            });
-                            // Add deliverable-level properties
-                            rowData.push(item.amRequired);
-                            rowData.push(item.responsibleDepartment);
-                            rowData.push(item.notes);
-
-                            ws_data.push(rowData);
-                        }
-                    });
-                }
-                addChildrenToExcel(item.children, 1);
-            });
-
-            // Create worksheet and workbook
-            const ws = XLSX.utils.aoa_to_sheet(ws_data);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Project Deliverables");
-
-            // Save the file
-            XLSX.writeFile(wb, `${projectData.title}_Deliverables.xlsx`);
-            addChangeLogEntry("Project data exported to Excel.");
-        }
-
-
-        // --- Import from Excel ---
-        function importFromExcel(event) {
-            const file = event.target.files[0];
-            if (!file) {
-                return;
+            } else if (userInput !== null) { // If user clicked cancel, userInput is null
+                alert("الكود غير صحيح. تم رفض عملية إعادة تعيين المشروع.");
             }
-
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-                const firstSheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON array, skipping first row (headers)
-                // header: 1 means first row is header, but we'll manage headers manually
-                // Since we need to map custom columns like "AM Required", "Responsible Department", "Notes"
-                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-                if (jsonData.length < 2) {
-                    alert("Excel file is empty or missing data rows.");
-                    return;
-                }
-
-                // Assume first row is headers for mapping
-                const importedHeaders = jsonData[0];
-                const importedRows = jsonData.slice(1);
-
-                // Clear current project data to import fresh
-                projectData = {
-                    title: projectData.title, // Keep existing title or set to a default
-                    sections: [],
-                    areas: [],
-                    nextSectionId: 1,
-                    nextDeliverableId: 1,
-                    nextAreaId: 1
-                };
-
-                // Map headers to identify Area columns and special deliverable properties
-                const areaColumnMap = {}; // { 'Area Name - Status': areaId, 'Area Name - Due Date': areaId }
-                let amRequiredColIndex = -1;
-                let responsibleDepartmentColIndex = -1;
-                let notesColIndex = -1;
-
-                importedHeaders.forEach((header, index) => {
-                    if (header.endsWith(' - Status')) {
-                        const areaName = header.replace(' - Status', '');
-                        const newAreaId = `area_col_${projectData.nextAreaId++}`;
-                        projectData.areas.push({ id: newAreaId, name: areaName });
-                        areaColumnMap[header] = newAreaId;
-                        areaColumnMap[header.replace('Status', 'Due Date')] = newAreaId; // Map due date too
-                    } else if (header === 'AM Required') {
-                        amRequiredColIndex = index;
-                    } else if (header === 'Responsible Department') {
-                        responsibleDepartmentColIndex = index;
-                    } else if (header === 'Notes') {
-                        notesColIndex = index;
-                    }
-                });
-
-                let currentSection = null;
-                let currentSubsection = null;
-
-                importedRows.forEach(row => {
-                    const firstCell = row[0] ? String(row[0]).trim() : '';
-
-                    if (!firstCell) return; // Skip empty rows
-
-                    // Check if it's a Section
-                    if (!firstCell.startsWith(' ') && !firstCell.startsWith('▶') && !firstCell.startsWith('-')) {
-                        // This is likely a new section
-                        currentSection = {
-                            id: `s${projectData.nextSectionId++}`,
-                            name: firstCell,
-                            type: "section",
-                            color: SECTION_COLORS[colorIndex++ % SECTION_COLORS.length],
-                            isCollapsed: false,
-                            children: []
-                        };
-                        projectData.sections.push(currentSection);
-                        currentSubsection = null; // Reset subsection when new section starts
-                    } else if (firstCell.startsWith('▶')) {
-                        // This is a subsection
-                        if (currentSection) {
-                            const subsectionName = firstCell.replace('▶', '').trim();
-                            currentSubsection = {
-                                id: `sub${projectData.nextSectionId++}`,
-                                name: subsectionName,
-                                type: "subsection",
-                                children: []
-                            };
-                            currentSection.children.push(currentSubsection);
-                        }
-                    } else if (firstCell.startsWith('-')) {
-                        // This is a deliverable
-                        if (currentSection) {
-                            const deliverableName = firstCell.replace('-', '').trim();
-                            const newDeliverable = {
-                                id: `d${projectData.nextDeliverableId++}`,
-                                name: deliverableName,
-                                type: "deliverable",
-                                amRequired: amRequiredColIndex !== -1 && row[amRequiredColIndex] !== undefined ? String(row[amRequiredColIndex]) : '',
-                                responsibleDepartment: responsibleDepartmentColIndex !== -1 && row[responsibleDepartmentColIndex] !== undefined ? String(row[responsibleDepartmentColIndex]) : '',
-                                notes: notesColIndex !== -1 && row[notesColIndex] !== undefined ? String(row[notesColIndex]) : '',
-                                areaData: {}
-                            };
-
-                            // Populate areaData for the deliverable
-                            projectData.areas.forEach(area => {
-                                const statusHeader = `${area.name} - Status`;
-                                const dueDateHeader = `${area.name} - Due Date`;
-                                const statusIndex = importedHeaders.indexOf(statusHeader);
-                                const dueDateIndex = importedHeaders.indexOf(dueDateHeader);
-
-                                newDeliverable.areaData[area.id] = {
-                                    status: statusIndex !== -1 && row[statusIndex] !== undefined ? String(row[statusIndex]) : 'NotStarted',
-                                    dueDate: dueDateIndex !== -1 && row[dueDateIndex] !== undefined ? String(row[dueDateIndex]) : ''
-                                };
-                            });
-
-                            if (currentSubsection) {
-                                currentSubsection.children.push(newDeliverable);
-                            } else {
-                                currentSection.children.push(newDeliverable);
-                            }
-                        }
-                    }
-                });
-
-                saveProjectData();
-                renderTable();
-                addChangeLogEntry("Project data imported from Excel.");
-                alert("Data imported successfully!");
-            };
-            reader.readAsArrayBuffer(file);
         }
 
-
-        // --- Reset Project ---
         function resetProject() {
-            if (confirm("Are you sure you want to reset the entire project? This action cannot be undone.")) {
-                projectData = {
-                    title: "My Awesome Project",
-                    sections: [],
-                    areas: [],
-                    nextSectionId: 1,
-                    nextDeliverableId: 1,
-                    nextAreaId: 1
-                };
-                addChangeLogEntry("Project has been reset.", "danger");
-                saveProjectData();
-                renderTable();
-                alert("Project has been reset to an empty state.");
-            }
-        }
-
-        // --- Change Log ---
-        function addChangeLogEntry(message, type = "info") {
-            const timestamp = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-            const entry = `[${timestamp}] ${message}`;
-            changeLogEntries.unshift(entry); // Add to the beginning
-
-            // Keep only the latest entries
-            if (changeLogEntries.length > MAX_CHANGE_LOG_ENTRIES) {
-                changeLogEntries.pop(); // Remove the oldest entry
-            }
-
-            renderChangeLog();
-        }
-
-        function renderChangeLog() {
-            changeLogList.innerHTML = '';
-            changeLogEntries.forEach(entry => {
-                const li = document.createElement('li');
-                li.textContent = entry;
-                changeLogList.appendChild(li);
-            });
-            // Ensure the log is visible when an entry is added
-            document.querySelector('.change-log-container').style.display = 'block';
-        }
-
-        // --- Connectivity Indicator ---
-        const connectivityIndicator = document.getElementById('connectivityIndicator');
-
-        function updateConnectivityIndicator(isOnline) {
-            if (isOnline) {
-                connectivityIndicator.style.backgroundColor = '#4CAF50'; // Green for online
-                connectivityIndicator.setAttribute('data-tooltip', 'Online (Connected)');
-            } else {
-                connectivityIndicator.style.backgroundColor = '#F44336'; // Red for offline
-                connectivityIndicator.setAttribute('data-tooltip', 'Offline (No Internet)');
-            }
-        }
-
-        // Function to check connectivity by trying to reach Firebase or a known reliable host
-        function fetchConnectivityStatus() {
-            // Ping Firebase's database URL
-            const testUrl = firebaseConfig.databaseURL + '/.info/servertime';
-            fetch(testUrl, { method: 'GET', mode: 'no-cors' }) // no-cors prevents CORS errors on success, just tells us if fetch could initiate
+            projectRef.remove()
                 .then(() => {
-                    updateConnectivityIndicator(true);
+                    projectData = {
+                        title: "My Awesome Project",
+                        sections: [],
+                        areas: [],
+                        nextSectionId: 1,
+                        nextDeliverableId: 1,
+                        nextAreaId: 1
+                    };
+                    renderTable();
+                    updateDashboard();
+                    populateDepartmentFilterDropdown();
+                    populateDatalists();
+                    addChangeLogEntry("تم إعادة تعيين المشروع بالكامل ومسح البيانات من Firebase.");
+                    alert("تمت إعادة تعيين المشروع بنجاح!");
                 })
-                .catch(() => {
-                    updateConnectivityIndicator(false);
+                .catch((error) => {
+                    console.error("Error resetting project:", error);
+                    alert("حدث خطأ أثناء إعادة تعيين المشروع: " + error.message);
                 });
+        }
+
+
+        // --- Column Resizing Logic (for Section / Deliverable column) ---
+        function setupColumnResizing() {
+            const headerCell = document.querySelector('.project-table th.sticky-col');
+            const resizer = headerCell.querySelector('.resizer');
+            let startX, startWidth;
+
+            resizer.addEventListener('mousedown', (e) => {
+                startX = e.clientX;
+                startWidth = headerCell.offsetWidth;
+                document.addEventListener('mousemove', doResize);
+                document.addEventListener('mouseup', stopResize);
+                document.body.style.cursor = 'col-resize'; // Change cursor globally
+                projectTable.style.userSelect = 'none'; // Prevent text selection during drag
+                projectTable.style.pointerEvents = 'none'; // Disable other table interactions
+            });
+
+            function doResize(e) {
+                const newWidth = startWidth + (e.clientX - startX);
+                // Set a minimum width
+                if (newWidth > 150) {
+                    headerCell.style.width = `${newWidth}px`;
+                }
+            }
+
+            function stopResize() {
+                document.removeEventListener('mousemove', doResize);
+                document.removeEventListener('mouseup', stopResize);
+                document.body.style.cursor = 'default';
+                projectTable.style.userSelect = 'auto';
+                projectTable.style.pointerEvents = 'auto';
+            }
         }
 
     </script>
