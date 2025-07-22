@@ -390,11 +390,13 @@
             background-size: 8px 10px;
         }
 
-        .status-dropdown.NotStarted { background-color: #f0f0f0; color: #555; }
-        .status-dropdown.InProgress { background-color: #e3f2fd; color: #2196F3; }
-        .status-dropdown.Review { background-color: #fffde7; color: #FFC107; }
-        .status-dropdown.Ready { background-color: #e8f5e9; color: var(--primary-color); }
-        .status-dropdown.Overdue { background-color: #ffebee; color: var(--danger-color); }
+        /* Enhanced Status Dropdown Colors */
+        .status-dropdown.NotStarted { background-color: #f0f4f8; color: #5c6c7d; } /* Light Blue-Gray */
+        .status-dropdown.InProgress { background-color: #e3f2fd; color: #2196F3; } /* Light Blue */
+        .status-dropdown.Review { background-color: #fffde7; color: #FFC107; } /* Light Amber */
+        .status-dropdown.Ready { background-color: #e8f5e9; color: var(--primary-color); } /* Light Green */
+        .status-dropdown.Overdue { background-color: #ffebee; color: var(--danger-color); } /* Light Red */
+
 
         .date-input {
             width: 100%;
@@ -416,6 +418,19 @@
             border-color: var(--secondary-color);
             box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
             background-color: white;
+        }
+
+        /* NEW: Styles for Overdue Dates */
+        .date-input.overdue-date-input {
+            color: var(--danger-color); /* Red color for overdue dates */
+            font-weight: 500;
+        }
+        .overdue-message {
+            color: var(--danger-color);
+            font-size: 0.75em;
+            margin-top: 3px;
+            white-space: normal;
+            display: block;
         }
 
         .overdue-deliverable {
@@ -1720,12 +1735,14 @@
 
                     projectData.areas.forEach(area => {
                         const areaInfo = item.areaData[area.id] || { status: "NotStarted", dueDate: "" };
+                        const isAreaOverdue = areaInfo.status !== 'Ready' && areaInfo.dueDate && (new Date(areaInfo.dueDate).setHours(0,0,0,0) < today.setHours(0,0,0,0));
                         cellsHtml += `
                             <td>
-                                <select class="status-dropdown" data-id="${item.id}" data-area-id="${area.id}" data-type="status">
+                                <select class="status-dropdown ${areaInfo.status}" data-id="${item.id}" data-area-id="${area.id}" data-type="status">
                                     ${STATUS_OPTIONS.map(status => `<option value="${status}" ${areaInfo.status === status ? 'selected' : ''} class="${status}">${status}</option>`).join('')}
                                 </select>
-                                <input type="date" value="${areaInfo.dueDate}" class="date-input" data-id="${item.id}" data-area-id="${area.id}" data-type="due-date">
+                                <input type="date" value="${areaInfo.dueDate}" class="date-input ${isAreaOverdue ? 'overdue-date-input' : ''}" data-id="${item.id}" data-area-id="${area.id}" data-type="due-date">
+                                ${isAreaOverdue ? '<span class="overdue-message">Date Overdue!</span>' : ''}
                             </td>
                         `;
                     });
@@ -1940,15 +1957,17 @@
 
             allDeliverables.forEach(deliverable => {
                 let isDeliverableOverdue = false;
-                let hasInProgress = false;
+                
+                // Track if deliverable has any 'InProgress' or 'Review' status across its areas
+                let hasInProgressOrReview = false; 
 
                 if (deliverable.areaData) {
                     Object.values(deliverable.areaData).forEach(areaInfo => {
                         totalAreasTracked++;
                         if (areaInfo.status === 'Ready') {
                             readyAreaEntries++;
-                        } else if (areaInfo.status === 'InProgress') {
-                            hasInProgress = true;
+                        } else if (areaInfo.status === 'InProgress' || areaInfo.status === 'Review') {
+                            hasInProgressOrReview = true;
                         }
 
                         if (areaInfo.status !== 'Ready' && areaInfo.dueDate) {
@@ -1960,16 +1979,18 @@
                         }
                     });
                 }
-                // Determine deliverable status based on *any* area status
+                
+                // Determine deliverable status for dashboard counts
                 const deliverableStatuses = Object.values(deliverable.areaData || {}).map(ad => ad.status);
 
-                // A deliverable is 'Ready' if ALL its areaData entries are 'Ready'
+                // A deliverable is 'Ready' for dashboard if ALL its areaData entries are 'Ready'
                 if (deliverableStatuses.length > 0 && deliverableStatuses.every(status => status === 'Ready')) {
                     ready++;
-                } else if (deliverableStatuses.includes('InProgress') || deliverableStatuses.includes('Review')) {
+                } else if (hasInProgressOrReview) { // If not fully Ready, but has InProgress/Review
                     inProgress++;
                 }
-                // A deliverable is 'Overdue' if any of its areaData entries are overdue AND not 'Ready'
+                
+                // A deliverable is 'Overdue' if any of its areaData entries are overdue (and not 'Ready' for that specific area)
                 if (isDeliverableOverdue) {
                     overdue++;
                 }
@@ -1997,11 +2018,12 @@
             progressPercentageSpan.textContent = `${stats.overallProgressPercentage}%`;
 
             if (chartJsLoaded) {
-                renderDonutChart(stats.ready, stats.total - stats.ready);
+                renderDonutChart(stats.readyAreaEntries, stats.totalAreasTracked - stats.readyAreaEntries); // Use specific counts for chart
             }
         }
 
-        function renderDonutChart(readyCount, otherCount) {
+        // Modified renderDonutChart to use `readyAreaEntries` and `totalAreasTracked`
+        function renderDonutChart(readyAreaEntriesCount, otherAreaEntriesCount) {
             const ctx = progressDonutChartCanvas.getContext('2d');
 
             if (progressChartInstance) {
@@ -2011,9 +2033,9 @@
             progressChartInstance = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
-                    labels: ['Ready', 'Other'],
+                    labels: ['Ready Areas', 'Other Areas'],
                     datasets: [{
-                        data: [readyCount, otherCount],
+                        data: [readyAreaEntriesCount, otherAreaEntriesCount],
                         backgroundColor: [
                             'var(--primary-color)', // Ready
                             '#ccc' // Other
@@ -2191,7 +2213,7 @@
                         }
                     });
                 }
-                addChildrenToExcel(section.children, 1);
+                addChildrenToExcel(item.children, 1);
             });
 
             // Create worksheet and workbook
