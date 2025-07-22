@@ -973,6 +973,8 @@
         </div>
     </div>
 
+    <datalist id="departmentList"></datalist>
+    <datalist id="amRequiredList"></datalist>
 
     <script>
         // --- Firebase Initialization ---
@@ -1002,6 +1004,36 @@
         const STATUS_OPTIONS = ["NotStarted", "InProgress", "Review", "Ready", "Overdue"];
         const SECTION_COLORS = ['#ADD8E6', '#90EE90', '#FFB6C1', '#FFDAB9', '#E6E6FA', '#FFFACD']; // LightBlue, LightGreen, LightPink, PeachPuff, Lavender, LemonChiffon
         let colorIndex = 0;
+
+        // --- Predefined Lists ---
+        const PREDEFINED_DEPARTMENTS = [
+            "Project Management Department",
+            "Planning & Scheduling Department",
+            "Design & Engineering Department",
+            "Construction Department",
+            "Procurement Department",
+            "Contracts Department",
+            "Cost Control Department",
+            "Quality Assurance & Control (QA/QC)",
+            "Health, Safety & Environment (HSE)",
+            "Logistics & Supply Chain Department",
+            "Finance & Accounting Department",
+            "Human Resources (HR) Department",
+            "Legal Affairs Department",
+            "IT & Systems Department",
+            "Stakeholder & Communications Department",
+            "Permits & Approvals Department",
+            "Operations & Maintenance (O&M)",
+            "Business Development Department",
+            "Surveying Department",
+            "Geotechnical & Soil Investigation Department"
+        ];
+
+        const AM_REQUIRED_OPTIONS = [
+            "Mandatory",
+            "Recommended",
+            "If applicable"
+        ];
 
         // --- DOM Elements ---
         const projectTitleInput = document.getElementById('projectTitle');
@@ -1048,7 +1080,7 @@
         // --- Utility Functions ---
         // Function to get all unique departments from all deliverables
         function getAllDepartments() {
-            const departments = new Set();
+            const departments = new Set(PREDEFINED_DEPARTMENTS); // Start with predefined ones
             getAllDeliverables().forEach(d => {
                 if (d.responsibleDepartment) {
                     departments.add(d.responsibleDepartment);
@@ -1057,16 +1089,15 @@
             return Array.from(departments).sort();
         }
 
-        // Function to populate a department dropdown
-        function populateDepartmentDropdown(selectElement, selectedValue, allDeliverablesForContext) {
+        // Function to populate a department dropdown (used for the filter, not for individual deliverable inputs anymore)
+        function populateDepartmentFilterDropdown() {
+            const selectElement = departmentFilter; // Always target the filter dropdown
             selectElement.innerHTML = '';
-            // Add a default empty option for clarity
             const defaultOption = document.createElement('option');
             defaultOption.value = '';
-            defaultOption.textContent = '-- اختر قسمًا --';
+            defaultOption.textContent = 'All Departments';
             selectElement.appendChild(defaultOption);
 
-            // Get all unique departments from current project data
             const departments = getAllDepartments();
             departments.forEach(dept => {
                 const option = document.createElement('option');
@@ -1075,13 +1106,15 @@
                 selectElement.appendChild(option);
             });
 
-            // Set the selected value
-            if (selectedValue) {
-                selectElement.value = selectedValue;
+            // Re-select current filter value if it exists
+            const currentFilterValue = selectElement.getAttribute('data-current-filter') || '';
+            if (currentFilterValue && departments.includes(currentFilterValue)) {
+                selectElement.value = currentFilterValue;
             } else {
-                selectElement.value = ''; // Ensure default is selected if no value or not found
+                selectElement.value = '';
             }
         }
+
 
         // --- Modal Functions (Moved to top for scope) ---
         function showModal(modalId) {
@@ -1104,11 +1137,10 @@
                 <input type="text" id="deliverableName_${index}" class="modal-deliverable-name" placeholder="مثال: Feasibility Study Report" value="${initialData.name || ''}">
 
                 <label for="amRequired_${index}">AM Required:</label>
-                <input type="text" id="amRequired_${index}" class="modal-am-required" placeholder="أدخل القيمة" value="${initialData.amRequired || ''}">
+                <input type="text" id="amRequired_${index}" class="modal-am-required" list="amRequiredList" placeholder="أدخل القيمة" value="${initialData.amRequired || ''}">
 
                 <label for="responsibleDepartment_${index}">القسم المسؤول:</label>
-                <select id="responsibleDepartment_${index}" class="modal-responsible-department">
-                </select>
+                <input type="text" id="responsibleDepartment_${index}" class="modal-responsible-department" list="departmentList" placeholder="أدخل القسم أو اختره" value="${initialData.responsibleDepartment || ''}">
 
                 <div class="deliverable-actions">
                     <button type="button" class="btn btn-outline show-comments-btn" data-index="${index}">💬 إظهار التعليقات</button>
@@ -1120,11 +1152,6 @@
                 </div>
             `;
             deliverablesContainer.appendChild(entryDiv);
-
-            // Populate responsible department dropdown for this new deliverable entry
-            const responsibleDeptSelect = entryDiv.querySelector(`#responsibleDepartment_${index}`);
-            // Pass projectData.sections to populateDepartmentDropdown for its initial population
-            populateDepartmentDropdown(responsibleDeptSelect, initialData.responsibleDepartment || '');
 
             // Add event listener for "Show Comments" button
             entryDiv.querySelector('.show-comments-btn').addEventListener('click', (e) => {
@@ -1290,6 +1317,7 @@
 
         // --- Initialization ---
         document.addEventListener('DOMContentLoaded', () => {
+            populateDatalists(); // Populate datalists first
             loadProjectData();
             renderTable();
             setupEventListeners();
@@ -1311,7 +1339,7 @@
         function saveProjectDataLocal() {
             localStorage.setItem('projectDeliverablesData', JSON.stringify(projectData));
             updateDashboard();
-            populateDepartmentFilter();
+            populateDepartmentFilterDropdown(); // Use the filter population function
         }
 
         function loadProjectDataLocal() {
@@ -1335,7 +1363,7 @@
                 // Initialize with some default sections/deliverables if no data exists
                 initializeDefaultData();
             }
-            populateDepartmentFilter();
+            populateDepartmentFilterDropdown(); // Use the filter population function
         }
 
 
@@ -1351,7 +1379,7 @@
                     } else {
                         console.log("Data saved to Firebase.");
                         updateDashboard();
-                        populateDepartmentFilter();
+                        populateDepartmentFilterDropdown(); // Use the filter population function
                         addChangeLogEntry("Data saved to cloud.", "success");
                         updateConnectivityIndicator(true); // Indicate connected
                     }
@@ -1385,7 +1413,7 @@
                         });
 
                         projectTitleInput.value = projectData.title;
-                        populateDepartmentFilter();
+                        populateDepartmentFilterDropdown(); // Use the filter population function
                         addChangeLogEntry("Data loaded from cloud.", "info");
                         updateConnectivityIndicator(true); // Indicate connected
                     } else {
@@ -1432,13 +1460,13 @@
                     {
                         id: 's1', name: "Phase 1: Planning", type: "section", color: SECTION_COLORS[0], isCollapsed: false, children: [
                             {
-                                id: 'd1', name: "Project Charter", type: "deliverable", amRequired: "8", responsibleDepartment: "PMO", notes: "Initial draft submitted", areaData: {
+                                id: 'd1', name: "Project Charter", type: "deliverable", amRequired: "Mandatory", responsibleDepartment: "Project Management Department", notes: "Initial draft submitted", areaData: {
                                     area_col_1: { status: "Ready", dueDate: "2024-07-30" },
                                     area_col_2: { status: "NotStarted", dueDate: "" }
                                 }
                             },
                             {
-                                id: 'd2', name: "Stakeholder Register", type: "deliverable", amRequired: "4", responsibleDepartment: "PMO", notes: "", areaData: {
+                                id: 'd2', name: "Stakeholder Register", type: "deliverable", amRequired: "Recommended", responsibleDepartment: "Stakeholder & Communications Department", notes: "", areaData: {
                                     area_col_1: { status: "InProgress", dueDate: "2024-08-05" },
                                     area_col_2: { status: "NotStarted", dueDate: "" }
                                 }
@@ -1446,13 +1474,13 @@
                             {
                                 id: 'sub1', name: "Requirement Gathering", type: "subsection", children: [
                                     {
-                                        id: 'd3', name: "Business Requirements Document (BRD)", type: "deliverable", amRequired: "16", responsibleDepartment: "Business Analysis", notes: "Awaiting client sign-off", areaData: {
+                                        id: 'd3', name: "Business Requirements Document (BRD)", type: "deliverable", amRequired: "Mandatory", responsibleDepartment: "Design & Engineering Department", notes: "Awaiting client sign-off", areaData: {
                                             area_col_1: { status: "Review", dueDate: "2024-07-25" },
                                             area_col_2: { status: "InProgress", dueDate: "2024-09-01" }
                                         }
                                     },
                                     {
-                                        id: 'd4', name: "Functional Specification Document (FSD)", type: "deliverable", amRequired: "24", responsibleDepartment: "Technical", notes: "", areaData: {
+                                        id: 'd4', name: "Functional Specification Document (FSD)", type: "deliverable", amRequired: "If applicable", responsibleDepartment: "IT & Systems Department", notes: "", areaData: {
                                             area_col_1: { status: "InProgress", dueDate: "2024-08-15" },
                                             area_col_2: { status: "NotStarted", dueDate: "" }
                                         }
@@ -1464,13 +1492,13 @@
                     {
                         id: 's2', name: "Phase 2: Execution", type: "section", color: SECTION_COLORS[1], isCollapsed: false, children: [
                             {
-                                id: 'd5', name: "System Design Document", type: "deliverable", amRequired: "32", responsibleDepartment: "Architecture", notes: "Review with dev team", areaData: {
+                                id: 'd5', name: "System Design Document", type: "deliverable", amRequired: "Mandatory", responsibleDepartment: "Design & Engineering Department", notes: "Review with dev team", areaData: {
                                     area_col_1: { status: "InProgress", dueDate: "2024-08-30" },
                                     area_col_2: { status: "InProgress", dueDate: "2024-10-01" }
                                 }
                             },
                             {
-                                id: 'd6', name: "Module Development Complete", type: "deliverable", amRequired: "80", responsibleDepartment: "Development", notes: "Started coding for module A", areaData: {
+                                id: 'd6', name: "Module Development Complete", type: "deliverable", amRequired: "Mandatory", responsibleDepartment: "Construction Department", notes: "Started coding for module A", areaData: {
                                     area_col_1: { status: "InProgress", dueDate: "2024-09-15" },
                                     area_col_2: { status: "NotStarted", dueDate: "" }
                                 }
@@ -1648,8 +1676,8 @@
                         <td class="sticky-col" style="padding-left: ${20 + (indentLevel * 20)}px;">
                             <input type="text" value="${item.name}" class="editable-cell deliverable-name-input" data-id="${item.id}" data-type="deliverable-name">
                             <div class="deliverable-meta">
-                                <div>AM Required: <input type="text" value="${item.amRequired}" class="editable-cell am-required-input" data-id="${item.id}" data-type="am-required"></div>
-                                <div>Responsible Dept: <select class="editable-cell responsible-department-select" data-id="${item.id}" data-type="responsible-department"></select></div>
+                                <div>AM Required: <input type="text" value="${item.amRequired}" class="editable-cell am-required-input" data-id="${item.id}" data-type="am-required" list="amRequiredList"></div>
+                                <div>Responsible Dept: <input type="text" value="${item.responsibleDepartment}" class="editable-cell responsible-department-input" data-id="${item.id}" data-type="responsible-department" list="departmentList"></div>
                                 ${item.notes ? `<span class="notes-icon">i<span class="notes-tooltip">${item.notes}</span></span>` : ''}
                             </div>
                         </td>
@@ -1676,12 +1704,6 @@
                     `;
                     deliverableRow.innerHTML = cellsHtml;
                     parentElement.appendChild(deliverableRow);
-
-                    // Populate department dropdown for the newly rendered deliverable
-                    const responsibleDeptSelect = deliverableRow.querySelector(`.responsible-department-select[data-id="${item.id}"]`);
-                    if (responsibleDeptSelect) {
-                        populateDepartmentDropdown(responsibleDeptSelect, item.responsibleDepartment);
-                    }
                 }
             });
         }
@@ -1773,28 +1795,6 @@
                     saveProjectData();
                     renderTable(); // Re-render to update any overdue highlighting etc.
                 };
-
-                // For responsible department dropdowns in the table after render
-                if (input.classList.contains('responsible-department-select')) {
-                    const deliverableId = input.getAttribute('data-id');
-                    let currentDept = '';
-                    // Find the deliverable to get its current responsibleDepartment
-                    projectData.sections.forEach(sec => {
-                        const findDeliverable = (children) => {
-                            children.forEach(item => {
-                                if (item.type === 'deliverable' && item.id === deliverableId) {
-                                    currentDept = item.responsibleDepartment;
-                                    return;
-                                }
-                                if (item.children) {
-                                    findDeliverable(item.children);
-                                }
-                            });
-                        };
-                        findDeliverable(sec.children);
-                    });
-                    populateDepartmentDropdown(input, currentDept);
-                }
             });
 
             // Delete buttons
@@ -1967,12 +1967,19 @@
 
         // --- Filtering ---
         function populateDepartmentFilter() {
+            // Store the current selection before clearing
+            const currentSelectedDepartment = departmentFilter.value;
+
             const departments = new Set();
             getAllDeliverables().forEach(d => {
                 if (d.responsibleDepartment) {
                     departments.add(d.responsibleDepartment);
                 }
             });
+
+            // Also add predefined departments to the filter dropdown options
+            PREDEFINED_DEPARTMENTS.forEach(dept => departments.add(dept));
+
 
             departmentFilter.innerHTML = '<option value="">All Departments</option>';
             Array.from(departments).sort().forEach(dept => {
@@ -1981,7 +1988,11 @@
                 option.textContent = dept;
                 departmentFilter.appendChild(option);
             });
+
+            // Restore previous selection
+            departmentFilter.value = currentSelectedDepartment;
         }
+
 
         function filterTable() {
             renderTable(); // Re-render table to apply filters
@@ -2029,6 +2040,26 @@
             window.addEventListener('online', fetchConnectivityStatus);
             window.addEventListener('offline', fetchConnectivityStatus);
         }
+
+        // --- Populate Datalists ---
+        function populateDatalists() {
+            const departmentDatalist = document.getElementById('departmentList');
+            departmentDatalist.innerHTML = '';
+            PREDEFINED_DEPARTMENTS.forEach(dept => {
+                const option = document.createElement('option');
+                option.value = dept;
+                departmentDatalist.appendChild(option);
+            });
+
+            const amRequiredDatalist = document.getElementById('amRequiredList');
+            amRequiredDatalist.innerHTML = '';
+            AM_REQUIRED_OPTIONS.forEach(optionText => {
+                const option = document.createElement('option');
+                option.value = optionText;
+                amRequiredDatalist.appendChild(option);
+            });
+        }
+
 
         // --- Export to Excel ---
         function exportToExcel() {
